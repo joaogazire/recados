@@ -25,7 +25,7 @@ function rodar(args) {
 const Central = GObject.registerClass(
 class Central extends PanelMenu.Button {
     _init() {
-        super._init(0.5, 'Recados');
+        super._init(0.5, 'Post-it');
         const caixa = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         caixa.add_child(new St.Icon({icon_name: 'accessories-text-editor-symbolic', style_class: 'system-status-icon'}));
         this._contador = new St.Label({text: '', y_align: Clutter.ActorAlign.CENTER, style_class: 'recados-contador'});

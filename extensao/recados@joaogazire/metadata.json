@@ -1,6 +1,6 @@
 {
   "uuid": "recados@joaogazire",
-  "name": "Recados",
-  "description": "Central das notas do Recados no painel e posições dos post-its na tela.",
+  "name": "Post-it",
+  "description": "Central das notas do Post-it no painel e posições delas na tela.",
   "shell-version": ["50"]
 }

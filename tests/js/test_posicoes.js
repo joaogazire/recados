@@ -10,6 +10,7 @@ function igual(obtido, esperado, nome) {
 
 igual(APP_ID, 'io.github.joaowgf.Recados', 'app id');
 igual(idDaJanela(APP_ID, 'Recado 12'), 12, 'id pelo título');
+igual(idDaJanela(APP_ID, 'Post-it 7'), 7, 'id pelo título novo');
 igual(idDaJanela('org.gnome.Nautilus', 'Recado 12'), null, 'outro app');
 igual(idDaJanela(APP_ID, 'Recado'), null, 'sem número');
 igual(idDaJanela(APP_ID, 'Recado 1x'), null, 'número inválido');

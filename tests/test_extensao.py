@@ -24,7 +24,7 @@ def test_titulo_da_janela_carrega_id(tmp_path):
 
     repo = Repositorio(tmp_path / "r.db")
     n = repo.criar()
-    assert JanelaNota(repo, n).get_title() == f"Recado {n.id}"
+    assert JanelaNota(repo, n).get_title() == f"Post-it {n.id}"
     repo.fechar()
 
 

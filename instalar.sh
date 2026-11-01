@@ -16,7 +16,7 @@ chmod +x ~/.local/bin/recados
 cat > ~/.local/share/applications/$APP_ID.desktop <<DESK
 [Desktop Entry]
 Type=Application
-Name=Recados
+Name=Post-it
 Comment=Post-its com Markdown
 Exec=$HOME/.local/bin/recados
 Icon=accessories-text-editor
@@ -46,8 +46,8 @@ if base not in atual:
     subprocess.check_call(["gsettings", "set", chave, "custom-keybindings", str(atual + [base])])
 PY
 S="org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BASE"
-gsettings set "$S" name 'Recados: nova nota'
+gsettings set "$S" name 'Post-it: nova nota'
 gsettings set "$S" command "$HOME/.local/bin/recados --nova"
 gsettings set "$S" binding '<Super><Alt>n'
 
-echo "Recados instalado. Saia e entre na sessão uma vez para o GNOME carregar a extensão."
+echo "Post-it instalado. Saia e entre na sessão uma vez para o GNOME carregar a extensão."

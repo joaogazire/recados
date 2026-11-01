@@ -153,7 +153,7 @@ class App(Adw.Application):
         pagina = Adw.PreferencesPage()
         pagina.add(grupo_novas)
         pagina.add(grupo_sessao)
-        janela = Adw.PreferencesWindow(application=self, title="Preferências do Recados", modal=False)
+        janela = Adw.PreferencesWindow(application=self, title="Preferências do Post-it", modal=False)
         janela.add(pagina)
         janela.present()
 

@@ -4,7 +4,7 @@ export const APP_ID = 'io.github.joaowgf.Recados';
 export function idDaJanela(wmClass, titulo) {
     if (wmClass !== APP_ID || typeof titulo !== 'string')
         return null;
-    const m = /^Recado (\d+)$/.exec(titulo);
+    const m = /^(?:Post-it|Recado) (\d+)$/.exec(titulo);
     return m ? Number(m[1]) : null;
 }
 
