@@ -57,3 +57,13 @@ def test_logica_das_fixadas():
 def test_logica_da_busca():
     r = subprocess.run(["gjs", "-m", "tests/js/test_busca.js"], cwd=RAIZ, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="sem node")
+def test_extensao_e_modulo_es_valido(tmp_path):
+    # .js sem package.json é lido como CommonJS e o node --check deixa passar erros: copia como .mjs
+    for arq in (RAIZ / "extensao" / "recados@joaogazire").glob("*.js"):
+        copia = tmp_path / (arq.stem + ".mjs")
+        copia.write_text(arq.read_text())
+        r = subprocess.run(["node", "--check", str(copia)], capture_output=True, text=True)
+        assert r.returncode == 0, f"{arq.name}: {r.stderr}"

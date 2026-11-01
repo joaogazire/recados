@@ -2,6 +2,8 @@
 const CORES = ['amarelo', 'azul', 'verde', 'rosa', 'roxo', 'cinza'];
 const MAX_TITULO = 60;
 const MAX_NOTAS = 200;
+const MAX_TEXTO = 2000;
+const MAX_TRECHO = 80;
 
 function contagem(v) {
     return Number.isInteger(v) && v >= 0 ? v : 0;
@@ -28,6 +30,7 @@ export function lerResumo(texto) {
                 cor: CORES.includes(n.cor) ? n.cor : 'amarelo',
                 pendentes: contagem(n.pendentes),
                 total: contagem(n.total),
+                texto: typeof n.texto === 'string' ? n.texto.slice(0, MAX_TEXTO) : '',
             };
         });
 }
@@ -74,4 +77,26 @@ export function folhas(pendentes, habitualAtual) {
         return {n: 1, feito: true};
     const n = Math.ceil((pendentes / Math.max(1, habitualAtual)) * MAX_FOLHAS);
     return {n: Math.min(MAX_FOLHAS, Math.max(1, n)), feito: false};
+}
+
+// --- Busca na central: sem acento e sem diferença de maiúsculas ---
+function normalizar(s) {
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+export function buscar(notas, termo) {
+    const t = normalizar(termo.trim());
+    if (!t)
+        return notas.map(n => ({...n, trecho: ''}));
+    const saida = [];
+    for (const n of notas) {
+        const linha = n.texto.split('\n').find(l => normalizar(l).includes(t));
+        if (linha === undefined && !normalizar(n.titulo).includes(t))
+            continue;
+        let trecho = (linha ?? '').replace(/^\s*(#{1,6} |[-*+] (\[[ xX]\] ?)?)/, '').trim();
+        if (trecho.length > MAX_TRECHO)
+            trecho = `${trecho.slice(0, MAX_TRECHO - 1)}…`;
+        saida.push({...n, trecho});
+    }
+    return saida;
 }

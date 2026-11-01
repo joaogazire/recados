@@ -54,7 +54,7 @@ def test_listar_usa_resumo_e_manda_texto_para_busca(repo):
     from recados.resumo import resumo
     n = repo.criar("# Uma primeira linha bem comprida demais para a central\nlinha dois")
     assert resumo(repo)[0]["titulo"] == "Uma primeira linha bem comprida"
-    repo.definir_resumo(n.id, "Linha comprida", "x")
+    repo.definir_resumo(n.id, "Linha comprida", resumir.assinatura(n.texto))
     item = resumo(repo)[0]
     assert item["titulo"] == "Linha comprida" and "linha dois" in item["texto"]
 
@@ -64,3 +64,12 @@ def test_chave_lida_do_opencode(tmp_path):
     arq.write_text(json.dumps({"deepseek": {"key": "sk-teste"}}))
     assert resumir.chave(arq) == "sk-teste"
     assert resumir.chave(tmp_path / "nao-existe.json") is None
+
+
+def test_resumo_velho_nao_aparece_depois_de_editar(repo):
+    from recados.resumo import resumo
+    n = repo.criar("# Mercado")
+    repo.definir_resumo(n.id, "Lista do mercado", resumir.assinatura("# Mercado"))
+    assert resumo(repo)[0]["titulo"] == "Lista do mercado"
+    repo.atualizar(n.id, texto="# Farmácia amanhã cedo")
+    assert resumo(repo)[0]["titulo"] == "Farmácia amanhã cedo"

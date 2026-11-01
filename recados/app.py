@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import date
 import os
 import sys
@@ -18,6 +19,7 @@ from recados.notas import FONTES, TAMANHOS, Repositorio, rascunho  # noqa: E402
 from recados import fixadas, preferencias  # noqa: E402
 from recados.dia import nota_de_hoje, titulo_do_dia  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
+from recados import resumir  # noqa: E402
 
 APP_ID = "io.github.joaowgf.Recados"
 
@@ -60,6 +62,9 @@ class App(Adw.Application):
         self.repo = Repositorio(caminho_banco())
         self.repo.purgar_apagadas()  # o desfazer só vale enquanto o app está aberto
         fixadas.gravar(self.repo)
+        self._resumindo = False
+        self._resumir()
+        GLib.timeout_add_seconds(60, self._resumir)
         acao = Gio.SimpleAction.new("nova", None)
         acao.connect("activate", lambda *_: self.nova_nota())
         self.add_action(acao)
@@ -142,6 +147,26 @@ class App(Adw.Application):
         j = self._janela(nota)
         j.present()
         j.editor.grab_focus()
+
+    def _resumir(self):
+        """Resume (DeepSeek) as notas que mudaram, numa thread com conexão própria ao banco."""
+        if not self._resumindo:
+            self._resumindo = True
+
+            def trabalho():
+                repo = None
+                try:
+                    repo = Repositorio(caminho_banco())
+                    resumir.atualizar(repo)
+                except Exception as e:  # banco ocupado etc.: tenta de novo daqui a 60 s
+                    print(f"recados: resumo falhou: {e}", file=sys.stderr)
+                finally:
+                    if repo is not None:
+                        repo.fechar()
+                    self._resumindo = False
+
+            threading.Thread(target=trabalho, daemon=True).start()
+        return GLib.SOURCE_CONTINUE
 
     def _janela(self, nota):
         return JanelaNota(self.repo, nota, self, ler=preferencias.carregar()["abrir_em"] == "leitura")

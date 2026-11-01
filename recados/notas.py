@@ -45,6 +45,8 @@ class Nota:
     criada: float
     editada: float
     fonte: str = "sans"
+    resumo: str | None = None  # até 5 palavras, gerado pelo DeepSeek
+    resumo_de: str | None = None  # hash do texto que gerou o resumo
 
 
 def rascunho(cor: str = "amarelo", fonte: str = "sans", largura: int = 260, altura: int = 220) -> Nota:
@@ -67,9 +69,11 @@ class Repositorio:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_ESQUEMA)
         colunas = {c[1] for c in self._db.execute("PRAGMA table_info(notas)")}
-        if "fonte" not in colunas:
-            with self._db:
-                self._db.execute("ALTER TABLE notas ADD COLUMN fonte TEXT NOT NULL DEFAULT 'sans'")
+        novas = {"fonte": "TEXT NOT NULL DEFAULT 'sans'", "resumo": "TEXT", "resumo_de": "TEXT"}
+        with self._db:
+            for nome, tipo in novas.items():  # nomes e tipos fixos, nada vem de fora
+                if nome not in colunas:
+                    self._db.execute(f"ALTER TABLE notas ADD COLUMN {nome} {tipo}")
 
     def fechar(self) -> None:
         self._db.close()
@@ -122,6 +126,14 @@ class Repositorio:
         if cur.rowcount == 0:
             raise KeyError(id_)
         return self.obter(id_)
+
+    def definir_resumo(self, id_: int, resumo: str, resumo_de: str) -> None:
+        """Guarda o resumo sem mexer em 'editada' (não é edição do usuário)."""
+        with self._db:
+            self._db.execute(
+                "UPDATE notas SET resumo = ?, resumo_de = ? WHERE id = ? AND apagada IS NULL",
+                (resumo, resumo_de, id_),
+            )
 
     def apagar(self, id_: int) -> None:
         with self._db:

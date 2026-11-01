@@ -9,7 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {idDaJanela, lerPosicoes, gravarPosicao, lerFixadas} from './posicoes.js';
-import {lerResumo, folhas, habitual, registrarAmostra} from './central.js';
+import {lerResumo, folhas, habitual, registrarAmostra, buscar} from './central.js';
 
 const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'recados']);
 const ATUALIZAR_S = 60;
@@ -80,10 +80,16 @@ class Central extends PanelMenu.Button {
         this.add_child(caixa);
         this._notas = [];
         this._ocupado = false;
+        this._montarMenu();
         this._desenhar();
         this.menu.connect('open-state-changed', (_m, aberto) => {
-            if (aberto)
+            if (aberto) {
                 this.atualizar();
+                if (this._busca)
+                    global.stage.set_key_focus(this._busca);
+            } else if (this._busca) {
+                this._busca.set_text('');
+            }
         });
         this._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, ATUALIZAR_S, () => {
             this.atualizar();
@@ -120,21 +126,50 @@ class Central extends PanelMenu.Button {
         });
     }
 
-    _desenhar() {
-        const pendentes = this._notas.reduce((acc, n) => acc + n.pendentes, 0);
-        const hoje = GLib.DateTime.new_now_local().format('%Y-%m-%d');
-        const historico = registrarAmostra(lerArquivo(HISTORICO), hoje, pendentes);
-        gravarArquivo(HISTORICO, historico);
-        this._pilha = folhas(pendentes, habitual(historico));
-        this._icone.queue_repaint();
-        this.accessible_name = `Post-it: ${pendentes} tarefas pendentes`;
-        this.menu.removeAll();
-        if (!this._notas.length)
-            this.menu.addMenuItem(new PopupMenu.PopupMenuItem('Nenhuma nota', {reactive: false}));
-        for (const n of this._notas) {
+    // Monta o menu fixo uma vez; depois só a lista muda (não tira o foco da busca).
+    _montarMenu() {
+        this._busca = new St.Entry({hint_text: 'Buscar nas notas…', can_focus: true, x_expand: true,
+            style_class: 'recados-busca', text: this._termo ?? ''});
+        this._busca.clutter_text.connect('text-changed', () => {
+            this._termo = this._busca.get_text();
+            this._listar();
+        });
+        const linhaBusca = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        linhaBusca.add_child(this._busca);
+        this.menu.addMenuItem(linhaBusca);
+        this._secao = new PopupMenu.PopupMenuSection();
+        this.menu.addMenuItem(this._secao);
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        const nova = new PopupMenu.PopupMenuItem('Nova nota');
+        nova.connect('activate', () => rodar(['--nova']));
+        this.menu.addMenuItem(nova);
+        const doDia = new PopupMenu.PopupMenuItem('Nota do dia');
+        doDia.connect('activate', () => rodar(['--hoje']));
+        this.menu.addMenuItem(doDia);
+        const todas = new PopupMenu.PopupMenuItem('Mostrar todas');
+        todas.connect('activate', () => rodar([]));
+        this.menu.addMenuItem(todas);
+        const prefs = new PopupMenu.PopupMenuItem('Preferências');
+        prefs.connect('activate', () => rodar(['--preferencias']));
+        this.menu.addMenuItem(prefs);
+    }
+
+    // Lista das notas (filtrada pela busca) dentro da seção do menu.
+    _listar() {
+        this._secao.removeAll();
+        const achadas = buscar(this._notas, this._termo ?? '');
+        if (!achadas.length) {
+            const vazio = this._notas.length ? 'Nada encontrado' : 'Nenhuma nota';
+            this._secao.addMenuItem(new PopupMenu.PopupMenuItem(vazio, {reactive: false}));
+        }
+        for (const n of achadas) {
             const item = new PopupMenu.PopupBaseMenuItem();
             item.add_child(new St.Widget({style_class: `recados-ponto recados-${n.cor}`, y_align: Clutter.ActorAlign.CENTER}));
-            item.add_child(new St.Label({text: n.titulo, x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
+            const textos = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+            textos.add_child(new St.Label({text: n.titulo}));
+            if (n.trecho)
+                textos.add_child(new St.Label({text: n.trecho, style_class: 'recados-trecho'}));
+            item.add_child(textos);
             if (n.total) {
                 const feito = n.pendentes === 0;
                 item.add_child(new St.Label({
@@ -144,21 +179,19 @@ class Central extends PanelMenu.Button {
                 }));
             }
             item.connect('activate', () => rodar(['--abrir', String(n.id)]));
-            this.menu.addMenuItem(item);
+            this._secao.addMenuItem(item);
         }
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        const nova = new PopupMenu.PopupMenuItem('Nova nota');
-        nova.connect('activate', () => rodar(['--nova']));
-        this.menu.addMenuItem(nova);
-        const hoje = new PopupMenu.PopupMenuItem('Nota do dia');
-        hoje.connect('activate', () => rodar(['--hoje']));
-        this.menu.addMenuItem(hoje);
-        const todas = new PopupMenu.PopupMenuItem('Mostrar todas');
-        todas.connect('activate', () => rodar([]));
-        this.menu.addMenuItem(todas);
-        const prefs = new PopupMenu.PopupMenuItem('Preferências');
-        prefs.connect('activate', () => rodar(['--preferencias']));
-        this.menu.addMenuItem(prefs);
+    }
+
+    _desenhar() {
+        const pendentes = this._notas.reduce((acc, n) => acc + n.pendentes, 0);
+        const hoje = GLib.DateTime.new_now_local().format('%Y-%m-%d');
+        const historico = registrarAmostra(lerArquivo(HISTORICO), hoje, pendentes);
+        gravarArquivo(HISTORICO, historico);
+        this._pilha = folhas(pendentes, habitual(historico));
+        this._icone.queue_repaint();
+        this.accessible_name = `Post-it: ${pendentes} tarefas pendentes`;
+        this._listar();
     }
 });
 

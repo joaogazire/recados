@@ -7,3 +7,5 @@
 .recados-cinza { background-color: #e5e7eb; }
 .recados-pendente { color: #f5c211; font-feature-settings: "tnum"; margin-left: 12px; }
 .recados-feito { color: #8ff0a4; margin-left: 12px; }
+.recados-busca { min-width: 260px; }
+.recados-trecho { font-size: 0.85em; color: #c0bfbc; }
