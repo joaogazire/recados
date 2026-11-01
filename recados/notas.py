@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CORES = ("amarelo", "azul", "verde", "rosa", "roxo", "cinza")
+FONTES = ("sans", "serifa", "mono")
 
-_EDITAVEIS = {"texto", "cor", "x", "y", "largura", "altura", "recolhida", "sempre_no_topo"}
+_EDITAVEIS = {"texto", "cor", "x", "y", "largura", "altura", "recolhida", "sempre_no_topo", "fonte"}
 _BOOLEANOS = {"recolhida", "sempre_no_topo"}
 
 _ESQUEMA = """
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS notas (
     altura INTEGER NOT NULL DEFAULT 220,
     recolhida INTEGER NOT NULL DEFAULT 0,
     sempre_no_topo INTEGER NOT NULL DEFAULT 0,
+    fonte TEXT NOT NULL DEFAULT 'sans',
     criada REAL NOT NULL,
     editada REAL NOT NULL,
     apagada REAL
@@ -41,6 +43,7 @@ class Nota:
     sempre_no_topo: bool
     criada: float
     editada: float
+    fonte: str = "sans"
 
 
 def _checar_cor(cor: str) -> None:
@@ -56,6 +59,10 @@ class Repositorio:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_ESQUEMA)
+        colunas = {c[1] for c in self._db.execute("PRAGMA table_info(notas)")}
+        if "fonte" not in colunas:
+            with self._db:
+                self._db.execute("ALTER TABLE notas ADD COLUMN fonte TEXT NOT NULL DEFAULT 'sans'")
 
     def fechar(self) -> None:
         self._db.close()
@@ -95,6 +102,8 @@ class Repositorio:
             raise ValueError(f"campos inválidos: {sorted(desconhecidos) or 'nenhum'}")
         if "cor" in campos:
             _checar_cor(campos["cor"])
+        if "fonte" in campos and campos["fonte"] not in FONTES:
+            raise ValueError(f"fonte inválida: {campos['fonte']!r}")
         valores = {k: int(v) if k in _BOOLEANOS else v for k, v in campos.items()}
         valores["editada"] = time.time()
         sets = ", ".join(f"{k} = ?" for k in valores)  # nomes vêm da lista branca

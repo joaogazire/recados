@@ -9,10 +9,12 @@ gi.require_version("GtkSource", "5")
 from gi.repository import GLib, Gtk, GtkSource, Pango  # noqa: E402
 
 from recados.markdown import alternar_item, blocos, para_pango, realces  # noqa: E402
-from recados.notas import CORES, Nota, Repositorio  # noqa: E402
+from recados.notas import CORES, FONTES, Nota, Repositorio  # noqa: E402
 
 ATRASO_SALVAR_MS = 400
 DESFAZER_MS = 5000
+TAMANHOS = {"P": (200, 160), "M": (260, 220), "G": (360, 320), "GG": (480, 440)}
+_NOMES_FONTE = {"sans": "Sans", "serifa": "Serifa", "mono": "Mono"}
 
 _ESTILO_TAGS = {
     "titulo1": {"weight": Pango.Weight.BOLD, "scale": 1.5},
@@ -77,6 +79,7 @@ class JanelaNota(Gtk.Window):
         self.set_child(caixa)
 
         self._aplicar_cor(nota.cor)
+        self._aplicar_fonte(nota.fonte)
         self._mostrar_corpo()
         self.connect("close-request", self._ao_fechar)
         atalhos = Gtk.ShortcutController(scope=Gtk.ShortcutScope.MANAGED)
@@ -106,6 +109,29 @@ class JanelaNota(Gtk.Window):
         menu = Gtk.MenuButton(icon_name="color-select-symbolic", popover=pop, tooltip_text="Cor")
         menu.add_css_class("flat")
         barra.append(menu)
+
+        opcoes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_start=6,
+                         margin_end=6, margin_top=6, margin_bottom=6)
+        opcoes.append(Gtk.Label(label="Fonte", xalign=0))
+        linha_fonte = Gtk.Box(spacing=4)
+        for f in FONTES:
+            b = Gtk.Button(label=_NOMES_FONTE[f])
+            b.add_css_class(f"fonte-{f}")
+            b.connect("clicked", lambda _b, f=f: (self.definir_fonte(f), pop_op.popdown()))
+            linha_fonte.append(b)
+        opcoes.append(linha_fonte)
+        opcoes.append(Gtk.Label(label="Tamanho", xalign=0))
+        linha_tam = Gtk.Box(spacing=4)
+        for nome in TAMANHOS:
+            b = Gtk.Button(label=nome, tooltip_text="%d × %d" % TAMANHOS[nome])
+            b.connect("clicked", lambda _b, t=nome: (self.definir_tamanho(t), pop_op.popdown()))
+            linha_tam.append(b)
+        opcoes.append(linha_tam)
+        pop_op = Gtk.Popover(child=opcoes)
+        aa = Gtk.MenuButton(icon_name="preferences-desktop-font-symbolic", popover=pop_op,
+                            tooltip_text="Fonte e tamanho")
+        aa.add_css_class("flat")
+        barra.append(aa)
 
         ler = Gtk.Button(icon_name="view-reveal-symbolic", tooltip_text="Ler / editar (Ctrl+E)")
         ler.add_css_class("flat")
@@ -148,6 +174,16 @@ class JanelaNota(Gtk.Window):
     def definir_cor(self, cor: str) -> None:
         self.nota = self.repo.atualizar(self.nota.id, cor=cor)
         self._aplicar_cor(cor)
+
+    def definir_fonte(self, fonte: str) -> None:
+        self.nota = self.repo.atualizar(self.nota.id, fonte=fonte)
+        self._aplicar_fonte(fonte)
+
+    def definir_tamanho(self, preset: str) -> None:
+        largura, altura = TAMANHOS[preset]
+        self.nota = self.repo.atualizar(self.nota.id, largura=largura, altura=altura)
+        if not self.nota.recolhida and not self.apagando:
+            self.set_default_size(largura, altura)
 
     def _mostrar_corpo(self) -> None:
         visivel = not self.nota.recolhida and not self.apagando
@@ -273,6 +309,11 @@ class JanelaNota(Gtk.Window):
         for c in CORES:
             self.remove_css_class(f"cor-{c}")
         self.add_css_class(f"cor-{cor}")
+
+    def _aplicar_fonte(self, fonte: str) -> None:
+        for f in FONTES:
+            self.remove_css_class(f"fonte-{f}")
+        self.add_css_class(f"fonte-{fonte}")
 
     def _realcar(self) -> None:
         ini, fim = self.buffer.get_bounds()
