@@ -311,6 +311,16 @@ def test_salvar_fixa_datas_relativas(repo, monkeypatch):
     assert j.texto() == repo.obter(j.nota.id).texto
 
 
+def test_app_cria_nota_de_voz_verde(repo, monkeypatch):
+    from recados.app import App
+    a = App()
+    a.repo = repo
+    monkeypatch.setattr(a, "abrir_nota", lambda i: True)
+    a._nota_de_voz("# Ideia\n- [ ] x")
+    [n] = repo.listar()
+    assert n.cor == "verde" and n.texto == "# Ideia\n- [ ] x"
+
+
 def test_cursor_nao_pula_ao_fixar_data(repo):
     j = JanelaNota(repo, repo.criar(""), ler=False)
     j.buffer.set_text("@amanhã 9h ligar")
