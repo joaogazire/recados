@@ -126,3 +126,11 @@ def test_app_abrir_nota_por_id(repo, monkeypatch):
     assert a.abrir_nota(n.id) is True
     assert abertas == [n.id]
     assert a.abrir_nota(999) is False
+
+
+def test_nota_com_texto_abre_em_leitura_e_vazia_em_edicao(repo):
+    cheia = JanelaNota(repo, repo.criar("# Oi\n- [ ] x"))
+    assert cheia.em_leitura and cheia.leitura.get_visible() and not cheia.rolagem.get_visible()
+    assert len(cheia.caixas_leitura()) == 1
+    vazia = JanelaNota(repo, repo.criar())
+    assert not vazia.em_leitura and vazia.rolagem.get_visible()
