@@ -32,7 +32,46 @@ export function lerResumo(texto) {
         });
 }
 
-export function rotuloPainel(notas) {
-    const soma = notas.reduce((acc, n) => acc + (n.pendentes || 0), 0);
-    return soma ? String(soma) : '';
+
+// --- Ícone de pilha: a altura da pilha é relativa ao quanto você costuma ter pendente ---
+const DIAS = 14;
+const HABITUAL_MIN = 4;
+const MAX_FOLHAS = 4;
+
+function lerHistorico(texto) {
+    let d;
+    try {
+        d = JSON.parse(texto);
+    } catch {
+        return {};
+    }
+    if (!d || typeof d !== 'object' || Array.isArray(d))
+        return {};
+    const saida = {};
+    for (const [dia, v] of Object.entries(d)) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dia) && Number.isInteger(v) && v >= 0)
+            saida[dia] = v;
+    }
+    return saida;
+}
+
+export function registrarAmostra(texto, dia, pendentes) {
+    const h = lerHistorico(texto);
+    h[dia] = Math.max(h[dia] ?? 0, pendentes);
+    const dias = Object.keys(h).sort().slice(-DIAS);
+    return JSON.stringify(Object.fromEntries(dias.map(d => [d, h[d]])));
+}
+
+export function habitual(texto) {
+    const v = Object.values(lerHistorico(texto));
+    if (!v.length)
+        return HABITUAL_MIN;
+    return Math.max(HABITUAL_MIN, Math.round(v.reduce((a, b) => a + b, 0) / v.length));
+}
+
+export function folhas(pendentes, habitualAtual) {
+    if (pendentes <= 0)
+        return {n: 1, feito: true};
+    const n = Math.ceil((pendentes / Math.max(1, habitualAtual)) * MAX_FOLHAS);
+    return {n: Math.min(MAX_FOLHAS, Math.max(1, n)), feito: false};
 }

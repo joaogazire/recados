@@ -9,10 +9,56 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {idDaJanela, lerPosicoes, gravarPosicao} from './posicoes.js';
-import {lerResumo, rotuloPainel} from './central.js';
+import {lerResumo, folhas, habitual, registrarAmostra} from './central.js';
 
 const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'recados']);
 const ATUALIZAR_S = 60;
+const HISTORICO = GLib.build_filenamev([GLib.get_user_data_dir(), 'recados', 'pendentes-por-dia.json']);
+const TAM = 18;
+
+function lerArquivo(caminho) {
+    try {
+        return new TextDecoder().decode(GLib.file_get_contents(caminho)[1]);
+    } catch {
+        return '';
+    }
+}
+
+function gravarArquivo(caminho, texto) {
+    try {
+        GLib.mkdir_with_parents(GLib.path_get_dirname(caminho), 0o700);
+        Gio.File.new_for_path(caminho).replace_contents(
+            new TextEncoder().encode(texto), null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+    } catch (e) {
+        console.error(`recados: não gravou ${caminho}: ${e}`);
+    }
+}
+
+// Desenha 1 a 4 post-its empilhados (o da frente embaixo à esquerda); ✓ quando não há pendentes.
+function desenharPilha(area, pilha) {
+    const cr = area.get_context();
+    const [w, h] = area.get_surface_size();
+    const lado = Math.round(w * 0.62), passo = (w - lado) / 3;
+    for (let i = pilha.n - 1; i >= 0; i--) {
+        const x = i * passo, y = h - lado - i * passo;
+        cr.rectangle(x + 0.5, y + 0.5, lado - 1, lado - 1);
+        cr.setSourceRGBA(0.996, 0.941, 0.541, i ? 0.8 : 1);
+        cr.fillPreserve();
+        cr.setSourceRGBA(0.79, 0.72, 0.29, 1);
+        cr.setLineWidth(1);
+        cr.stroke();
+    }
+    if (pilha.feito) {
+        const y0 = h - lado;
+        cr.setSourceRGBA(0.18, 0.49, 0.2, 1);
+        cr.setLineWidth(2);
+        cr.moveTo(lado * 0.22, y0 + lado * 0.55);
+        cr.lineTo(lado * 0.42, y0 + lado * 0.75);
+        cr.lineTo(lado * 0.8, y0 + lado * 0.3);
+        cr.stroke();
+    }
+    cr.$dispose();
+}
 
 function rodar(args) {
     try {
@@ -27,9 +73,10 @@ class Central extends PanelMenu.Button {
     _init() {
         super._init(0.5, 'Post-it');
         const caixa = new St.BoxLayout({style_class: 'panel-status-menu-box'});
-        caixa.add_child(new St.Icon({icon_name: 'accessories-text-editor-symbolic', style_class: 'system-status-icon'}));
-        this._contador = new St.Label({text: '', y_align: Clutter.ActorAlign.CENTER, style_class: 'recados-contador'});
-        caixa.add_child(this._contador);
+        this._pilha = {n: 1, feito: true};
+        this._icone = new St.DrawingArea({width: TAM, height: TAM, y_align: Clutter.ActorAlign.CENTER});
+        this._icone.connect('repaint', a => desenharPilha(a, this._pilha));
+        caixa.add_child(this._icone);
         this.add_child(caixa);
         this._notas = [];
         this._ocupado = false;
@@ -74,9 +121,13 @@ class Central extends PanelMenu.Button {
     }
 
     _desenhar() {
-        const rotulo = rotuloPainel(this._notas);
-        this._contador.text = rotulo;
-        this._contador.visible = rotulo !== '';
+        const pendentes = this._notas.reduce((acc, n) => acc + n.pendentes, 0);
+        const hoje = GLib.DateTime.new_now_local().format('%Y-%m-%d');
+        const historico = registrarAmostra(lerArquivo(HISTORICO), hoje, pendentes);
+        gravarArquivo(HISTORICO, historico);
+        this._pilha = folhas(pendentes, habitual(historico));
+        this._icone.queue_repaint();
+        this.accessible_name = `Post-it: ${pendentes} tarefas pendentes`;
         this.menu.removeAll();
         if (!this._notas.length)
             this.menu.addMenuItem(new PopupMenu.PopupMenuItem('Nenhuma nota', {reactive: false}));
