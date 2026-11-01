@@ -328,3 +328,18 @@ def test_cursor_nao_pula_ao_fixar_data(repo):
     j.salvar_agora()
     fim = j.buffer.get_iter_at_mark(j.buffer.get_insert()).get_offset()
     assert fim == len(j.texto())
+
+
+def test_janela_de_gravacao_mostra_estado_e_texto():
+    from recados.gravacao_janela import JanelaGravacao
+    parar = []
+    j = JanelaGravacao(lambda: parar.append(1))
+    assert "Gravando" in j.status.get_label()
+    j.mostrar_texto("quero comprar uma estante")
+    assert j.texto.get_label() == "quero comprar uma estante"
+    j.tique(segundos=67)
+    assert "1:07" in j.status.get_label()
+    j.botao_parar.emit("clicked")
+    assert parar == [1]
+    j.resumindo()
+    assert "Resumindo" in j.status.get_label() and not j.botao_parar.get_sensitive()
