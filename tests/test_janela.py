@@ -133,3 +133,25 @@ def test_nota_com_texto_abre_em_leitura_e_vazia_em_edicao(repo):
     assert len(cheia.caixas_leitura()) == 1
     vazia = JanelaNota(repo, repo.criar())
     assert not vazia.em_leitura and vazia.rolagem.get_visible()
+
+
+def test_preferencia_abrir_em_edicao(repo):
+    j = JanelaNota(repo, repo.criar("# Oi"), ler=False)
+    assert not j.em_leitura and j.rolagem.get_visible()
+
+
+def test_nova_nota_usa_fonte_e_tamanho_das_preferencias(repo, tmp_path, monkeypatch):
+    from recados import app as modapp
+    from recados.janela import TAMANHOS
+    from recados.preferencias import PADRAO, salvar
+    pref = tmp_path / "p.json"
+    salvar(pref, {**PADRAO, "fonte": "serifa", "tamanho": "G"})
+    monkeypatch.setenv("RECADOS_PREFERENCIAS", str(pref))
+    a = modapp.App()
+    a.repo = repo
+    monkeypatch.setattr(a, "get_windows", lambda: [object()])
+    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: type("J", (), {
+        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())
+    a.nova_nota()
+    n = repo.listar()[-1]
+    assert n.fonte == "serifa" and (n.largura, n.altura) == TAMANHOS["G"]
