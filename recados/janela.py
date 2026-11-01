@@ -9,11 +9,10 @@ gi.require_version("GtkSource", "5")
 from gi.repository import GLib, Gtk, GtkSource, Pango  # noqa: E402
 
 from recados.markdown import alternar_item, blocos, para_pango, realces  # noqa: E402
-from recados.notas import CORES, FONTES, Nota, Repositorio  # noqa: E402
+from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
 
 ATRASO_SALVAR_MS = 400
 DESFAZER_MS = 5000
-TAMANHOS = {"P": (200, 160), "M": (260, 220), "G": (360, 320), "GG": (480, 440)}
 _NOMES_FONTE = {"sans": "Sans", "serifa": "Serifa", "mono": "Mono"}
 
 _ESTILO_TAGS = {
@@ -31,7 +30,8 @@ _ESTILO_TAGS = {
 
 
 class JanelaNota(Gtk.Window):
-    def __init__(self, repo: Repositorio, nota: Nota, app: Gtk.Application | None = None):
+    def __init__(self, repo: Repositorio, nota: Nota, app: Gtk.Application | None = None,
+                 ler: bool = True):
         super().__init__(application=app, title=f"Recado {nota.id}", decorated=False)
         self.repo = repo
         self.nota = nota
@@ -80,7 +80,7 @@ class JanelaNota(Gtk.Window):
 
         self._aplicar_cor(nota.cor)
         self._aplicar_fonte(nota.fonte)
-        if nota.texto.strip():  # nota com conteúdo abre para ler; vazia abre para escrever
+        if ler and nota.texto.strip():  # nota com conteúdo abre para ler; vazia abre para escrever
             self.em_leitura = True
             self._montar_leitura()
         self._mostrar_corpo()
@@ -140,6 +140,11 @@ class JanelaNota(Gtk.Window):
         ler.add_css_class("flat")
         ler.connect("clicked", lambda *_: self.alternar_leitura())
         barra.append(ler)
+
+        prefs = Gtk.Button(icon_name="emblem-system-symbolic", tooltip_text="Preferências")
+        prefs.add_css_class("flat")
+        prefs.connect("clicked", lambda *_: self.activate_action("app.preferencias", None))
+        barra.append(prefs)
 
         lixo = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Apagar nota")
         lixo.add_css_class("flat")

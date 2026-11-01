@@ -102,6 +102,9 @@ class Central extends PanelMenu.Button {
         const todas = new PopupMenu.PopupMenuItem('Mostrar todas');
         todas.connect('activate', () => rodar([]));
         this.menu.addMenuItem(todas);
+        const prefs = new PopupMenu.PopupMenuItem('Preferências');
+        prefs.connect('activate', () => rodar(['--preferencias']));
+        this.menu.addMenuItem(prefs);
     }
 });
 

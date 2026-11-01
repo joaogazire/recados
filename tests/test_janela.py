@@ -119,7 +119,7 @@ def test_app_abrir_nota_por_id(repo, monkeypatch):
     a.repo = repo
     n = repo.criar("x")
     abertas = []
-    monkeypatch.setattr("recados.app.JanelaNota", lambda r, nota, app: type("J", (), {
+    monkeypatch.setattr("recados.app.JanelaNota", lambda r, nota, app, ler=True: type("J", (), {
         "present": lambda s: abertas.append(nota.id), "nota": nota})())
     monkeypatch.setattr(a, "get_windows", lambda: [])
     assert a.abrir_nota(n.id) is True
@@ -149,9 +149,18 @@ def test_nova_nota_usa_fonte_e_tamanho_das_preferencias(repo, tmp_path, monkeypa
     monkeypatch.setenv("RECADOS_PREFERENCIAS", str(pref))
     a = modapp.App()
     a.repo = repo
-    monkeypatch.setattr(a, "get_windows", lambda: [object()])
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {0: object()})
     monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: type("J", (), {
         "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())
     a.nova_nota()
     n = repo.listar()[-1]
     assert n.fonte == "serifa" and (n.largura, n.altura) == TAMANHOS["G"]
+
+
+def test_shutdown_ignora_janela_que_nao_e_nota(repo, monkeypatch):
+    from recados.app import App
+    a = App()
+    a.repo = repo
+    monkeypatch.setattr(a, "get_windows", lambda: [Gtk.Window()])
+    monkeypatch.setattr("recados.app.Adw.Application.do_shutdown", lambda s: None)
+    a.do_shutdown()

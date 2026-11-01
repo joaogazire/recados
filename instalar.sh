@@ -23,7 +23,7 @@ Icon=accessories-text-editor
 Categories=Utility;
 StartupNotify=false
 DESK
-cp ~/.local/share/applications/$APP_ID.desktop ~/.config/autostart/$APP_ID.desktop
+sed "s|^Exec=.*|Exec=$HOME/.local/bin/recados --sessao|" ~/.local/share/applications/$APP_ID.desktop > ~/.config/autostart/$APP_ID.desktop
 
 ln -sfn "$RAIZ/extensao/$UUID" ~/.local/share/gnome-shell/extensions/$UUID
 python3 - "$UUID" <<'PY'

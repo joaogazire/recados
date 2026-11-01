@@ -8,6 +8,7 @@ from pathlib import Path
 
 CORES = ("amarelo", "azul", "verde", "rosa", "roxo", "cinza")
 FONTES = ("sans", "serifa", "mono")
+TAMANHOS = {"P": (200, 160), "M": (260, 220), "G": (360, 320), "GG": (480, 440)}
 
 _EDITAVEIS = {"texto", "cor", "x", "y", "largura", "altura", "recolhida", "sempre_no_topo", "fonte"}
 _BOOLEANOS = {"recolhida", "sempre_no_topo"}

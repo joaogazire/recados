@@ -13,7 +13,8 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from recados.janela import JanelaNota  # noqa: E402
-from recados.notas import Repositorio  # noqa: E402
+from recados.notas import FONTES, TAMANHOS, Repositorio  # noqa: E402
+from recados import preferencias  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
 
 APP_ID = "io.github.joaowgf.Recados"
@@ -30,6 +31,8 @@ class App(Adw.Application):
         self.repo: Repositorio | None = None
         self.add_main_option("nova", ord("n"), 0, 0, "Criar uma nota nova", None)
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
+        self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
+        self.add_main_option("preferencias", ord("p"), 0, 0, "Abrir as preferências", None)
         self.add_main_option("listar", ord("l"), 0, 0, "Imprimir as notas em JSON e sair", None)
 
     def do_handle_local_options(self, opcoes):
@@ -55,11 +58,19 @@ class App(Adw.Application):
         acao = Gio.SimpleAction.new("nova", None)
         acao.connect("activate", lambda *_: self.nova_nota())
         self.add_action(acao)
+        acao = Gio.SimpleAction.new("preferencias", None)
+        acao.connect("activate", lambda *_: self.mostrar_preferencias())
+        self.add_action(acao)
         self.set_accels_for_action("app.nova", ["<Control>n"])
 
     def do_command_line(self, linha):
         opcoes = linha.get_options_dict().end().unpack()
-        if opcoes.get("nova"):
+        if opcoes.get("preferencias"):
+            self.mostrar_preferencias()
+        elif opcoes.get("sessao"):
+            if preferencias.carregar()["abrir_na_sessao"]:
+                self.activate()
+        elif opcoes.get("nova"):
             self.nova_nota()
         elif "abrir" in opcoes:
             if not self.abrir_nota(opcoes["abrir"]):
@@ -68,41 +79,88 @@ class App(Adw.Application):
             self.activate()
         return 0
 
+    def _notas_abertas(self) -> dict:
+        return {j.nota.id: j for j in self.get_windows() if isinstance(j, JanelaNota)}
+
     def do_activate(self):
-        janelas = self.get_windows()
-        if janelas:
-            for j in janelas:
-                j.present()
-            return
+        """Mostra todas as notas: traz as abertas para a frente e reabre as fechadas."""
+        abertas = self._notas_abertas()
         notas = self.repo.listar()
-        if not notas:
+        if not notas and not abertas:
             self.nova_nota()
         for n in notas:
-            JanelaNota(self.repo, n, self).present()
+            (abertas.get(n.id) or self._janela(n)).present()
 
     def abrir_nota(self, id_: int) -> bool:
         """Traz a nota para a frente (reabre se estiver fechada). Devolve se achou."""
-        for j in self.get_windows():
-            if getattr(j, "nota", None) and j.nota.id == id_:
-                j.present()
-                return True
+        if (j := self._notas_abertas().get(id_)):
+            j.present()
+            return True
         nota = self.repo.obter(id_)
         if nota is None:
             return False
-        JanelaNota(self.repo, nota, self).present()
+        self._janela(nota).present()
         return True
 
     def nova_nota(self):
-        if not self.get_windows():
+        if not self._notas_abertas():
             for n in self.repo.listar():
-                JanelaNota(self.repo, n, self).present()
-        j = JanelaNota(self.repo, self.repo.criar(), self)
+                self._janela(n).present()
+        p = preferencias.carregar()
+        largura, altura = TAMANHOS[p["tamanho"]]
+        nota = self.repo.atualizar(self.repo.criar().id, fonte=p["fonte"], largura=largura, altura=altura)
+        j = self._janela(nota)
         j.present()
         j.editor.grab_focus()
 
+    def _janela(self, nota):
+        return JanelaNota(self.repo, nota, self, ler=preferencias.carregar()["abrir_em"] == "leitura")
+
+    def mostrar_preferencias(self):
+        p = preferencias.carregar()
+        nomes_fonte = {"sans": "Sans", "serifa": "Serifa", "mono": "Mono"}
+        tamanhos = list(TAMANHOS)
+        modos = [("leitura", "Leitura (Markdown formatado)"), ("edicao", "Edição (texto Markdown)")]
+
+        def combo(titulo, rotulos, atual):
+            linha = Adw.ComboRow(title=titulo, model=Gtk.StringList.new(rotulos))
+            linha.set_selected(atual)
+            return linha
+
+        fonte = combo("Fonte das notas novas", [nomes_fonte[f] for f in FONTES], FONTES.index(p["fonte"]))
+        tamanho = combo("Tamanho das notas novas",
+                        ["%s — %d × %d" % (t, *TAMANHOS[t]) for t in tamanhos], tamanhos.index(p["tamanho"]))
+        modo = combo("Notas abrem em", [r for _, r in modos], [m for m, _ in modos].index(p["abrir_em"]))
+        sessao = Adw.SwitchRow(title="Mostrar as notas ao iniciar a sessão", active=p["abrir_na_sessao"])
+
+        def gravar(*_):
+            preferencias.salvar(None, {
+                "fonte": FONTES[fonte.get_selected()],
+                "tamanho": tamanhos[tamanho.get_selected()],
+                "abrir_em": modos[modo.get_selected()][0],
+                "abrir_na_sessao": sessao.get_active(),
+            })
+
+        for linha in (fonte, tamanho, modo):
+            linha.connect("notify::selected", gravar)
+        sessao.connect("notify::active", gravar)
+
+        grupo_novas = Adw.PreferencesGroup(title="Notas")
+        for linha in (fonte, tamanho, modo):
+            grupo_novas.add(linha)
+        grupo_sessao = Adw.PreferencesGroup(title="Sessão")
+        grupo_sessao.add(sessao)
+        pagina = Adw.PreferencesPage()
+        pagina.add(grupo_novas)
+        pagina.add(grupo_sessao)
+        janela = Adw.PreferencesWindow(application=self, title="Preferências do Recados", modal=False)
+        janela.add(pagina)
+        janela.present()
+
     def do_shutdown(self):
         for j in self.get_windows():
-            j.salvar_agora()
+            if isinstance(j, JanelaNota):
+                j.salvar_agora()
         self.repo.fechar()
         Adw.Application.do_shutdown(self)
 
