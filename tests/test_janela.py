@@ -249,3 +249,25 @@ def test_nota_do_dia_nao_abre_dois_rascunhos(repo, monkeypatch):
     primeiro = a._rascunho_dia
     a.nota_do_dia()
     assert a._rascunho_dia is primeiro
+
+
+def test_captura_com_inbox_aberta_atualiza_a_janela(repo, monkeypatch):
+    from recados.app import App
+    from recados.captura import capturar
+    inbox = capturar(repo, "a")
+    j = JanelaNota(repo, inbox)
+    a = App()
+    a.repo = repo
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {inbox.id: j})
+    a.capturar("b")
+    assert j.texto().endswith("- [ ] a\n- [ ] b")
+    assert repo.obter(inbox.id).texto.endswith("- [ ] a\n- [ ] b")
+
+
+def test_janela_de_captura_enter_grava(repo):
+    from recados.captura_janela import JanelaCaptura
+    recebidos = []
+    c = JanelaCaptura(recebidos.append)
+    c.entrada.set_text("ideia rápida")
+    c.entrada.emit("activate")
+    assert recebidos == ["ideia rápida"]
