@@ -112,3 +112,17 @@ def test_preset_de_tamanho_salva_e_redimensiona(repo):
     assert (repo.obter(n.id).largura, repo.obter(n.id).altura) == (larg, alt)
     assert j.get_default_size() == (larg, alt)
     assert len(TAMANHOS) >= 3
+
+
+def test_app_abrir_nota_por_id(repo, monkeypatch):
+    from recados.app import App
+    a = App()
+    a.repo = repo
+    n = repo.criar("x")
+    abertas = []
+    monkeypatch.setattr("recados.app.JanelaNota", lambda r, nota, app: type("J", (), {
+        "present": lambda s: abertas.append(nota.id), "nota": nota})())
+    monkeypatch.setattr(a, "get_windows", lambda: [])
+    assert a.abrir_nota(n.id) is True
+    assert abertas == [n.id]
+    assert a.abrir_nota(999) is False

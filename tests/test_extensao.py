@@ -33,3 +33,9 @@ def test_app_id_igual_na_extensao():
 
     js = (RAIZ / "extensao/recados@joaogazire/posicoes.js").read_text()
     assert f"'{APP_ID}'" in js
+
+
+@pytest.mark.skipif(not shutil.which("gjs"), reason="sem gjs")
+def test_logica_da_central():
+    r = subprocess.run(["gjs", "-m", "tests/js/test_central.js"], cwd=RAIZ, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
