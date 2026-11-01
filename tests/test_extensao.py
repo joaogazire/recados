@@ -52,3 +52,8 @@ def test_logica_das_fixadas():
     r = subprocess.run(["gjs", "-m", "tests/js/test_fixadas.js"], cwd=RAIZ, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
 
+
+@pytest.mark.skipif(not shutil.which("gjs"), reason="sem gjs")
+def test_logica_da_busca():
+    r = subprocess.run(["gjs", "-m", "tests/js/test_busca.js"], cwd=RAIZ, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
