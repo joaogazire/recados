@@ -67,3 +67,9 @@ def test_extensao_e_modulo_es_valido(tmp_path):
         copia.write_text(arq.read_text())
         r = subprocess.run(["node", "--check", str(copia)], capture_output=True, text=True)
         assert r.returncode == 0, f"{arq.name}: {r.stderr}"
+
+
+@pytest.mark.skipif(not shutil.which("gjs"), reason="sem gjs")
+def test_logica_dos_estados():
+    r = subprocess.run(["gjs", "-m", "tests/js/test_estados.js"], cwd=RAIZ, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr

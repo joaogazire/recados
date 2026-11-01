@@ -271,3 +271,31 @@ def test_janela_de_captura_enter_grava(repo):
     c.entrada.set_text("ideia rápida")
     c.entrada.emit("activate")
     assert recebidos == ["ideia rápida"]
+
+
+def test_concluir_nota_fecha_e_muda_estado(repo):
+    n = repo.criar("- [x] a")
+    j = JanelaNota(repo, n)
+    j.definir_estado("concluida")
+    assert repo.obter(n.id).estado == "concluida"
+
+
+def test_aviso_tudo_feito(repo):
+    j = JanelaNota(repo, repo.criar("# L\n- [ ] a\n- [x] b"), ler=False)
+    assert not j.aviso_concluir.get_visible()
+    j.buffer.set_text("# L\n- [x] a\n- [x] b")
+    assert j.aviso_concluir.get_visible()
+    j.buffer.set_text("sem caixas")
+    assert not j.aviso_concluir.get_visible()
+
+
+def test_reabrir_volta_para_ativa(repo, monkeypatch):
+    from recados.app import App
+    n = repo.criar("a")
+    repo.mudar_estado(n.id, "cancelada")
+    a = App()
+    a.repo = repo
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {})
+    monkeypatch.setattr(a, "_janela", lambda nota: type("J", (), {"present": lambda s: None})())
+    assert a.reabrir_nota(n.id) is True
+    assert repo.obter(n.id).estado == "ativa"
