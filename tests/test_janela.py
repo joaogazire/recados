@@ -60,3 +60,35 @@ def test_realce_aplica_tag_negrito(repo):
     j = JanelaNota(repo, n)
     it = j.buffer.get_iter_at_offset(3)
     assert any(t.props.name == "negrito" for t in it.get_tags())
+
+
+def test_modo_leitura_mostra_checkbox_e_clicar_salva(repo):
+    n = repo.criar("# T\n- [ ] pão")
+    j = JanelaNota(repo, n)
+    j.alternar_leitura()
+    assert j.em_leitura and not j.rolagem.get_visible() and j.leitura.get_visible()
+    caixas = j.caixas_leitura()
+    assert len(caixas) == 1 and not caixas[0].get_active()
+    caixas[0].set_active(True)
+    assert repo.obter(n.id).texto == "# T\n- [x] pão"
+    assert j.texto() == "# T\n- [x] pão"
+    j.alternar_leitura()
+    assert not j.em_leitura and j.rolagem.get_visible()
+
+
+def test_clicar_caixa_no_editor_alterna(repo):
+    n = repo.criar("- [ ] a")
+    j = JanelaNota(repo, n)
+    assert j.clicar_offset(3) is True
+    j.salvar_agora()
+    assert repo.obter(n.id).texto == "- [x] a"
+    assert j.clicar_offset(6) is False
+
+
+def test_apagar_com_desfazer(repo):
+    n = repo.criar("x")
+    j = JanelaNota(repo, n)
+    j.apagar()
+    assert repo.obter(n.id) is None and j.apagando
+    j.desfazer_apagar()
+    assert repo.obter(n.id).texto == "x" and not j.apagando
