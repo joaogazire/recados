@@ -35,7 +35,7 @@ if uuid not in atual:
     subprocess.check_call(["gsettings", "set", "org.gnome.shell", "enabled-extensions", str(atual + [uuid])])
 PY
 
-# Atalho global Super+Alt+N -> nova nota (acrescenta sem apagar os outros)
+# Atalho global Super+Alt+N -> captura rápida (acrescenta sem apagar os outros)
 BASE=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/recados/
 python3 - "$BASE" <<'PY'
 import ast, subprocess, sys
@@ -46,8 +46,8 @@ if base not in atual:
     subprocess.check_call(["gsettings", "set", chave, "custom-keybindings", str(atual + [base])])
 PY
 S="org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BASE"
-gsettings set "$S" name 'Post-it: nova nota'
-gsettings set "$S" command "$HOME/.local/bin/recados --nova"
+gsettings set "$S" name 'Post-it: captura rápida'
+gsettings set "$S" command "$HOME/.local/bin/recados --capturar"
 gsettings set "$S" binding '<Super><Alt>n'
 
 echo "Post-it instalado. Saia e entre na sessão uma vez para o GNOME carregar a extensão."

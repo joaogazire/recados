@@ -17,6 +17,8 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 from recados.janela import JanelaNota  # noqa: E402
 from recados.notas import FONTES, TAMANHOS, Repositorio, rascunho  # noqa: E402
 from recados import fixadas, preferencias  # noqa: E402
+from recados.captura import achar_inbox, acrescentar_item, capturar  # noqa: E402
+from recados.captura_janela import JanelaCaptura  # noqa: E402
 from recados.dia import nota_de_hoje, titulo_do_dia  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
 from recados import resumir  # noqa: E402
@@ -37,6 +39,7 @@ class App(Adw.Application):
         self.add_main_option("nova", ord("n"), 0, 0, "Criar uma nota nova", None)
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
         self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
+        self.add_main_option("capturar", ord("c"), 0, 0, "Captura rápida: uma linha para a Inbox", None)
         self.add_main_option("hoje", ord("d"), 0, 0, "Abrir (ou criar) a nota do dia", None)
         self.add_main_option("preferencias", ord("p"), 0, 0, "Abrir as preferências", None)
         self.add_main_option("listar", ord("l"), 0, 0, "Imprimir as notas em JSON e sair", None)
@@ -79,7 +82,9 @@ class App(Adw.Application):
 
     def do_command_line(self, linha):
         opcoes = linha.get_options_dict().end().unpack()
-        if opcoes.get("hoje"):
+        if opcoes.get("capturar"):
+            self.mostrar_captura()
+        elif opcoes.get("hoje"):
             self.nota_do_dia()
         elif opcoes.get("preferencias"):
             self.mostrar_preferencias()
@@ -117,6 +122,22 @@ class App(Adw.Application):
             return False
         self._janela(nota).present()
         return True
+
+    def mostrar_captura(self):
+        JanelaCaptura(self.capturar, self).present()
+
+    def capturar(self, item: str):
+        """Acrescenta '- [ ] item' na Inbox; se a Inbox está aberta, passa pela janela para não perder edição."""
+        inbox = achar_inbox(self.repo)
+        j = self._notas_abertas().get(inbox.id) if inbox else None
+        if j is None:
+            capturar(self.repo, item)
+            return
+        j.salvar_agora()
+        j._trocar_texto(acrescentar_item(j.texto(), item))
+        j.salvar_agora()
+        if j.em_leitura:
+            j._montar_leitura()
 
     def nota_do_dia(self):
         """Traz a nota de hoje; se não existe, abre um rascunho com o título da data."""
