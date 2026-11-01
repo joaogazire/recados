@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 import os
 import sys
 from pathlib import Path
@@ -14,7 +15,8 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from recados.janela import JanelaNota  # noqa: E402
 from recados.notas import FONTES, TAMANHOS, Repositorio, rascunho  # noqa: E402
-from recados import preferencias  # noqa: E402
+from recados import fixadas, preferencias  # noqa: E402
+from recados.dia import nota_de_hoje, titulo_do_dia  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
 
 APP_ID = "io.github.joaowgf.Recados"
@@ -29,9 +31,11 @@ class App(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.repo: Repositorio | None = None
+        self._rascunho_dia = None  # janela da nota do dia ainda não salva (evita abrir duas)
         self.add_main_option("nova", ord("n"), 0, 0, "Criar uma nota nova", None)
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
         self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
+        self.add_main_option("hoje", ord("d"), 0, 0, "Abrir (ou criar) a nota do dia", None)
         self.add_main_option("preferencias", ord("p"), 0, 0, "Abrir as preferências", None)
         self.add_main_option("listar", ord("l"), 0, 0, "Imprimir as notas em JSON e sair", None)
 
@@ -55,9 +59,14 @@ class App(Adw.Application):
         )
         self.repo = Repositorio(caminho_banco())
         self.repo.purgar_apagadas()  # o desfazer só vale enquanto o app está aberto
+        fixadas.gravar(self.repo)
         acao = Gio.SimpleAction.new("nova", None)
         acao.connect("activate", lambda *_: self.nova_nota())
         self.add_action(acao)
+        acao = Gio.SimpleAction.new("hoje", None)
+        acao.connect("activate", lambda *_: self.nota_do_dia())
+        self.add_action(acao)
+        self.set_accels_for_action("app.hoje", ["<Control>d"])
         acao = Gio.SimpleAction.new("preferencias", None)
         acao.connect("activate", lambda *_: self.mostrar_preferencias())
         self.add_action(acao)
@@ -65,7 +74,9 @@ class App(Adw.Application):
 
     def do_command_line(self, linha):
         opcoes = linha.get_options_dict().end().unpack()
-        if opcoes.get("preferencias"):
+        if opcoes.get("hoje"):
+            self.nota_do_dia()
+        elif opcoes.get("preferencias"):
             self.mostrar_preferencias()
         elif opcoes.get("sessao"):
             if preferencias.carregar()["abrir_na_sessao"]:
@@ -101,6 +112,25 @@ class App(Adw.Application):
             return False
         self._janela(nota).present()
         return True
+
+    def nota_do_dia(self):
+        """Traz a nota de hoje; se não existe, abre um rascunho com o título da data."""
+        if (n := nota_de_hoje(self.repo)) is not None:
+            self.abrir_nota(n.id)
+            return
+        if self._rascunho_dia is not None:
+            self._rascunho_dia.present()
+            return
+        p = preferencias.carregar()
+        largura, altura = TAMANHOS[p["tamanho"]]
+        j = self._janela(rascunho(fonte=p["fonte"], largura=largura, altura=altura))
+        self._rascunho_dia = j
+        j.connect("destroy", lambda *_: setattr(self, "_rascunho_dia", None))
+        j.modelo = titulo_do_dia(date.today()) + "\n- [ ] "
+        j.buffer.set_text(j.modelo)
+        j.buffer.place_cursor(j.buffer.get_end_iter())
+        j.present()
+        j.editor.grab_focus()
 
     def nova_nota(self):
         if not self._notas_abertas():

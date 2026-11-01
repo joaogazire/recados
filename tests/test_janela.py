@@ -215,3 +215,37 @@ def test_alfinete_fixa_e_grava_arquivo(repo, tmp_path, monkeypatch):
     assert json.loads(destino.read_text()) == [n.id]
     j.alternar_fixada()
     assert json.loads(destino.read_text()) == []
+
+
+def test_rascunho_com_modelo_so_salva_se_mudar(repo):
+    j = JanelaNota(repo, _rascunho())
+    j.modelo = "# 01/11/2026 (dom)\n- [ ] "
+    j.buffer.set_text(j.modelo)
+    j.salvar_agora()
+    assert repo.listar() == []
+    j.buffer.set_text(j.modelo + "pão")
+    j.salvar_agora()
+    assert repo.listar()[0].texto.endswith("pão")
+
+
+def test_apagar_fixada_tira_do_arquivo(repo, tmp_path, monkeypatch):
+    import json
+    destino = tmp_path / "fixadas.json"
+    monkeypatch.setenv("RECADOS_FIXADAS", str(destino))
+    j = JanelaNota(repo, repo.criar("oi"))
+    j.alternar_fixada()
+    j.apagar()
+    assert json.loads(destino.read_text()) == []
+    j.desfazer_apagar()
+    assert json.loads(destino.read_text()) == [j.nota.id]
+
+
+def test_nota_do_dia_nao_abre_dois_rascunhos(repo, monkeypatch):
+    from recados.app import App
+    a = App()
+    a.repo = repo
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {})
+    a.nota_do_dia()
+    primeiro = a._rascunho_dia
+    a.nota_do_dia()
+    assert a._rascunho_dia is primeiro

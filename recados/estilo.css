@@ -19,3 +19,4 @@ window.recado .aviso { min-height: 30px; color: #222; }
 window.recado.fonte-sans .editor, window.recado.fonte-sans .leitura label, button.fonte-sans { font-family: "Noto Sans", sans-serif; }
 window.recado.fonte-serifa .editor, window.recado.fonte-serifa .leitura label, button.fonte-serifa { font-family: "Noto Serif", serif; }
 window.recado.fonte-mono .editor, window.recado.fonte-mono .leitura label, button.fonte-mono { font-family: "Noto Sans Mono", monospace; }
+window.recado.fixada .barra { box-shadow: inset 0 -2px rgba(0,0,0,.25); }

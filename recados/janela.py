@@ -10,6 +10,7 @@ gi.require_version("Adw", "1")
 gi.require_version("GtkSource", "5")
 from gi.repository import GLib, Gtk, GtkSource, Pango  # noqa: E402
 
+from recados import fixadas  # noqa: E402
 from recados.markdown import alternar_item, blocos, para_pango, realces  # noqa: E402
 from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
 
@@ -41,6 +42,7 @@ class JanelaNota(Gtk.Window):
         self._apagar_id = 0
         self.em_leitura = False
         self.apagando = False
+        self.modelo = ""  # texto pronto de um rascunho (nota do dia): sozinho não conta como digitado
         self.add_css_class("recado")
         self.set_default_size(nota.largura, nota.altura)
 
@@ -82,6 +84,7 @@ class JanelaNota(Gtk.Window):
 
         self._aplicar_cor(nota.cor)
         self._aplicar_fonte(nota.fonte)
+        self._aplicar_fixada()
         if ler and nota.texto.strip():  # nota com conteúdo abre para ler; vazia abre para escrever
             self.em_leitura = True
             self._montar_leitura()
@@ -143,6 +146,12 @@ class JanelaNota(Gtk.Window):
         ler.connect("clicked", lambda *_: self.alternar_leitura())
         barra.append(ler)
 
+        self._alfinete = Gtk.ToggleButton(icon_name="view-pin-symbolic", tooltip_text="Fixar por cima das janelas",
+                                          active=self.nota.sempre_no_topo)
+        self._alfinete.add_css_class("flat")
+        self._alfinete.connect("toggled", lambda b: b.get_active() != self.nota.sempre_no_topo and self.alternar_fixada())
+        barra.append(self._alfinete)
+
         prefs = Gtk.Button(icon_name="emblem-system-symbolic", tooltip_text="Preferências")
         prefs.add_css_class("flat")
         prefs.connect("clicked", lambda *_: self.activate_action("app.preferencias", None))
@@ -179,12 +188,15 @@ class JanelaNota(Gtk.Window):
             self._salvar_id = 0
         texto = self.texto()
         if self.nota.id is None:
-            if texto.strip():
+            if texto.strip() and texto.strip() != self.modelo.strip():
                 n = self.nota
                 nova = self.repo.criar(texto, n.cor)
                 self.nota = self.repo.atualizar(nova.id, fonte=n.fonte, largura=n.largura,
-                                                altura=n.altura, recolhida=n.recolhida)
+                                                altura=n.altura, recolhida=n.recolhida,
+                                                sempre_no_topo=n.sempre_no_topo)
                 self.set_title(self._titulo(self.nota))
+                if self.nota.sempre_no_topo:
+                    fixadas.gravar(self.repo)
         elif texto != self.nota.texto:
             self.nota = self.repo.atualizar(self.nota.id, texto=texto)
 
@@ -197,6 +209,18 @@ class JanelaNota(Gtk.Window):
         if self.nota.id is None:
             return replace(self.nota, **campos)
         return self.repo.atualizar(self.nota.id, **campos)
+
+    def alternar_fixada(self) -> None:
+        self.nota = self._mudar(sempre_no_topo=not self.nota.sempre_no_topo)
+        self._aplicar_fixada()
+        if self.nota.id is not None:
+            fixadas.gravar(self.repo)
+
+    def _aplicar_fixada(self) -> None:
+        fixa = self.nota.sempre_no_topo
+        (self.add_css_class if fixa else self.remove_css_class)("fixada")
+        if self._alfinete.get_active() != fixa:
+            self._alfinete.set_active(fixa)
 
     def definir_cor(self, cor: str) -> None:
         self.nota = self._mudar(cor=cor)
@@ -263,6 +287,8 @@ class JanelaNota(Gtk.Window):
             self.destroy()
             return
         self.repo.apagar(self.nota.id)
+        if self.nota.sempre_no_topo:
+            fixadas.gravar(self.repo)
         self.apagando = True
         self._mostrar_corpo()
         self._aviso.set_visible(True)
@@ -276,6 +302,8 @@ class JanelaNota(Gtk.Window):
             GLib.source_remove(self._apagar_id)
             self._apagar_id = 0
         self.repo.restaurar(self.nota.id)
+        if self.nota.sempre_no_topo:
+            fixadas.gravar(self.repo)
         self.apagando = False
         self._aviso.set_visible(False)
         self._mostrar_corpo()

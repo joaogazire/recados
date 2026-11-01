@@ -51,3 +51,4 @@ def test_logica_da_pilha():
 def test_logica_das_fixadas():
     r = subprocess.run(["gjs", "-m", "tests/js/test_fixadas.js"], cwd=RAIZ, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+

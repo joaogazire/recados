@@ -30,3 +30,13 @@ export function gravarPosicao(texto, id, x, y) {
     dados[String(id)] = {x: Math.round(x), y: Math.round(y)};
     return JSON.stringify(dados);
 }
+
+export function lerFixadas(texto) {
+    let d;
+    try {
+        d = JSON.parse(texto);
+    } catch {
+        return [];
+    }
+    return Array.isArray(d) ? d.filter(v => Number.isInteger(v) && v > 0) : [];
+}

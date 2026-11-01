@@ -8,7 +8,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import {idDaJanela, lerPosicoes, gravarPosicao} from './posicoes.js';
+import {idDaJanela, lerPosicoes, gravarPosicao, lerFixadas} from './posicoes.js';
 import {lerResumo, folhas, habitual, registrarAmostra} from './central.js';
 
 const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'recados']);
@@ -150,6 +150,9 @@ class Central extends PanelMenu.Button {
         const nova = new PopupMenu.PopupMenuItem('Nova nota');
         nova.connect('activate', () => rodar(['--nova']));
         this.menu.addMenuItem(nova);
+        const hoje = new PopupMenu.PopupMenuItem('Nota do dia');
+        hoje.connect('activate', () => rodar(['--hoje']));
+        this.menu.addMenuItem(hoje);
         const todas = new PopupMenu.PopupMenuItem('Mostrar todas');
         todas.connect('activate', () => rodar([]));
         this.menu.addMenuItem(todas);
@@ -161,6 +164,7 @@ class Central extends PanelMenu.Button {
 
 const ARQUIVO = GLib.build_filenamev([GLib.get_user_data_dir(), 'recados', 'posicoes.json']);
 const ATRASO_MS = 600;
+const FIXADAS = GLib.build_filenamev([GLib.get_user_data_dir(), 'recados', 'fixadas.json']);
 
 function ler() {
     try {
@@ -186,12 +190,22 @@ export default class RecadosExtension extends Extension {
         this._central = new Central();
         Main.panel.addToStatusArea(this.uuid, this._central);
         this._janelas = new Map(); // MetaWindow -> {ids de sinais, timeout}
+        this._fixadas = new Set(lerFixadas(lerArquivo(FIXADAS)));
+        this._monitor = Gio.File.new_for_path(FIXADAS).monitor_file(Gio.FileMonitorFlags.WATCH_MOVES, null);
+        this._monitorId = this._monitor.connect('changed', () => {
+            this._fixadas = new Set(lerFixadas(lerArquivo(FIXADAS)));
+            for (const w of this._janelas.keys())
+                this._fixar(w);
+        });
         this._criada = global.display.connect('window-created', (_d, w) => this._vigiar(w));
         for (const ator of global.get_window_actors())
             this._vigiar(ator.meta_window, false);
     }
 
     disable() {
+        this._monitor.disconnect(this._monitorId);
+        this._monitor.cancel();
+        this._monitor = null;
         this._central?.destroy();
         this._central = null;
         global.display.disconnect(this._criada);
@@ -210,6 +224,7 @@ export default class RecadosExtension extends Extension {
         const s = {sinais: [], timeout: 0, restaurou: !restaurar};
         this._janelas.set(w, s);
         const tentar = () => {
+            this._fixar(w);
             const id = this._id(w);
             if (id === null || s.restaurou)
                 return;
@@ -218,6 +233,7 @@ export default class RecadosExtension extends Extension {
             if (p)
                 w.move_frame(true, p.x, p.y);
         };
+        this._fixar(w);
         s.sinais.push(w.connect('shown', tentar));
         s.sinais.push(w.connect('notify::title', tentar));
         s.sinais.push(w.connect('position-changed', () => this._agendar(w, s)));
@@ -225,6 +241,18 @@ export default class RecadosExtension extends Extension {
             this._soltar(w, s);
             this._janelas?.delete(w);
         }));
+    }
+
+    // Põe por cima (ou tira) conforme o alfinete da nota; só o Shell consegue isso no Wayland.
+    _fixar(w) {
+        const id = this._id(w);
+        if (id === null)
+            return;
+        const quer = this._fixadas.has(id);
+        if (quer && !w.is_above())
+            w.make_above();
+        else if (!quer && w.is_above())
+            w.unmake_above();
     }
 
     _agendar(w, s) {
