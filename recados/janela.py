@@ -1,6 +1,7 @@
 """Janela de uma nota: editor Markdown, cor, recolher, salvar sozinho."""
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 import gi
@@ -14,6 +15,7 @@ from recados import fixadas  # noqa: E402
 from recados.markdown import alternar_item, blocos, para_pango, realces  # noqa: E402
 from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
 
+_CAIXAS = re.compile(r"^([ \t]*[-*+] )\[([ xX])\]", re.M)
 ATRASO_SALVAR_MS = 5000  # salva 5 s depois da última alteração (e sempre ao fechar)
 DESFAZER_MS = 5000
 _NOMES_FONTE = {"sans": "Sans", "serifa": "Serifa", "mono": "Mono"}
@@ -75,16 +77,25 @@ class JanelaNota(Gtk.Window):
         desfazer.connect("clicked", lambda *_: self.desfazer_apagar())
         self._aviso.append(desfazer)
 
+        self.aviso_concluir = Gtk.Box(spacing=6, visible=False, margin_start=8, margin_end=4)
+        self.aviso_concluir.add_css_class("aviso")
+        self.aviso_concluir.append(Gtk.Label(label="Tudo feito ✓", hexpand=True, xalign=0))
+        concluir = Gtk.Button(label="Concluir nota")
+        concluir.connect("clicked", lambda *_: self.definir_estado("concluida"))
+        self.aviso_concluir.append(concluir)
+
         caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         caixa.append(self._barra())
         caixa.append(self.rolagem)
         caixa.append(self.leitura)
+        caixa.append(self.aviso_concluir)
         caixa.append(self._aviso)
         self.set_child(caixa)
 
         self._aplicar_cor(nota.cor)
         self._aplicar_fonte(nota.fonte)
         self._aplicar_fixada()
+        self._checar_tudo_feito()
         if ler and nota.texto.strip():  # nota com conteúdo abre para ler; vazia abre para escrever
             self.em_leitura = True
             self._montar_leitura()
@@ -157,6 +168,19 @@ class JanelaNota(Gtk.Window):
         prefs.connect("clicked", lambda *_: self.activate_action("app.preferencias", None))
         barra.append(prefs)
 
+        estados = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_start=4, margin_end=4,
+                          margin_top=4, margin_bottom=4)
+        for estado, rotulo in (("concluida", "Concluir"), ("cancelada", "Cancelar"), ("arquivada", "Arquivar")):
+            b = Gtk.Button(label=rotulo)
+            b.add_css_class("flat")
+            b.connect("clicked", lambda _b, e=estado: (pop_estado.popdown(), self.definir_estado(e)))
+            estados.append(b)
+        pop_estado = Gtk.Popover(child=estados)
+        mais = Gtk.MenuButton(icon_name="view-more-symbolic", popover=pop_estado,
+                              tooltip_text="Concluir, cancelar ou arquivar")
+        mais.add_css_class("flat")
+        barra.append(mais)
+
         lixo = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Apagar nota")
         lixo.add_css_class("flat")
         lixo.connect("clicked", lambda *_: self.apagar())
@@ -209,6 +233,21 @@ class JanelaNota(Gtk.Window):
         if self.nota.id is None:
             return replace(self.nota, **campos)
         return self.repo.atualizar(self.nota.id, **campos)
+
+    def definir_estado(self, estado: str) -> None:
+        """Concluir/cancelar/arquivar: salva, muda o estado e tira a nota da tela."""
+        self.salvar_agora()
+        if self.nota.id is not None:
+            self.nota = self.repo.mudar_estado(self.nota.id, estado)
+            if self.nota.sempre_no_topo:
+                fixadas.gravar(self.repo)
+            self._guardar_tamanho()
+        self.apagando = True  # não salvar de novo ao fechar
+        self.destroy()
+
+    def _checar_tudo_feito(self) -> None:
+        marcas = [m for _p, m in _CAIXAS.findall(self.texto())]
+        self.aviso_concluir.set_visible(bool(marcas) and " " not in marcas and not self.apagando)
 
     def alternar_fixada(self) -> None:
         self.nota = self._mudar(sempre_no_topo=not self.nota.sempre_no_topo)
@@ -384,6 +423,7 @@ class JanelaNota(Gtk.Window):
 
     def _ao_mudar(self, *_):
         self._realcar()
+        self._checar_tudo_feito()
         if self._salvar_id:
             GLib.source_remove(self._salvar_id)
         self._salvar_id = GLib.timeout_add(ATRASO_SALVAR_MS, self._salvar_atrasado)

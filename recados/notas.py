@@ -8,6 +8,7 @@ from pathlib import Path
 
 CORES = ("amarelo", "azul", "verde", "rosa", "roxo", "cinza")
 FONTES = ("sans", "serifa", "mono")
+ESTADOS = ("ativa", "concluida", "cancelada", "arquivada")
 TAMANHOS = {"P": (200, 160), "M": (260, 220), "G": (360, 320), "GG": (480, 440)}
 
 _EDITAVEIS = {"texto", "cor", "x", "y", "largura", "altura", "recolhida", "sempre_no_topo", "fonte"}
@@ -47,6 +48,8 @@ class Nota:
     fonte: str = "sans"
     resumo: str | None = None  # até 5 palavras, gerado pelo DeepSeek
     resumo_de: str | None = None  # hash do texto que gerou o resumo
+    estado: str = "ativa"
+    estado_em: float | None = None
 
 
 def rascunho(cor: str = "amarelo", fonte: str = "sans", largura: int = 260, altura: int = 220) -> Nota:
@@ -69,7 +72,8 @@ class Repositorio:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_ESQUEMA)
         colunas = {c[1] for c in self._db.execute("PRAGMA table_info(notas)")}
-        novas = {"fonte": "TEXT NOT NULL DEFAULT 'sans'", "resumo": "TEXT", "resumo_de": "TEXT"}
+        novas = {"fonte": "TEXT NOT NULL DEFAULT 'sans'", "resumo": "TEXT", "resumo_de": "TEXT",
+                 "estado": "TEXT NOT NULL DEFAULT 'ativa'", "estado_em": "REAL"}
         with self._db:
             for nome, tipo in novas.items():  # nomes e tipos fixos, nada vem de fora
                 if nome not in colunas:
@@ -101,10 +105,15 @@ class Repositorio:
         ).fetchone()
         return self._nota(linha) if linha else None
 
-    def listar(self) -> list[Nota]:
-        linhas = self._db.execute(
-            "SELECT * FROM notas WHERE apagada IS NULL ORDER BY criada, id"
-        ).fetchall()
+    def listar(self, estado: str | None = "ativa") -> list[Nota]:
+        """Notas não apagadas; por padrão só as ativas. estado=None traz todas."""
+        if estado is None:
+            linhas = self._db.execute(
+                "SELECT * FROM notas WHERE apagada IS NULL ORDER BY criada, id").fetchall()
+        else:
+            linhas = self._db.execute(
+                "SELECT * FROM notas WHERE apagada IS NULL AND estado = ? ORDER BY criada, id", (estado,)
+            ).fetchall()
         return [self._nota(l) for l in linhas]
 
     def atualizar(self, id_: int, **campos) -> Nota:
@@ -122,6 +131,18 @@ class Repositorio:
             cur = self._db.execute(
                 f"UPDATE notas SET {sets} WHERE id = ? AND apagada IS NULL",
                 (*valores.values(), id_),
+            )
+        if cur.rowcount == 0:
+            raise KeyError(id_)
+        return self.obter(id_)
+
+    def mudar_estado(self, id_: int, estado: str) -> Nota:
+        if estado not in ESTADOS:
+            raise ValueError(f"estado inválido: {estado!r}")
+        with self._db:
+            cur = self._db.execute(
+                "UPDATE notas SET estado = ?, estado_em = ? WHERE id = ? AND apagada IS NULL",
+                (estado, time.time(), id_),
             )
         if cur.rowcount == 0:
             raise KeyError(id_)

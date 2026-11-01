@@ -40,6 +40,7 @@ class App(Adw.Application):
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
         self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
         self.add_main_option("capturar", ord("c"), 0, 0, "Captura rápida: uma linha para a Inbox", None)
+        self.add_main_option("reabrir", 0, 0, GLib.OptionArg.INT, "Reabrir nota concluída/cancelada/arquivada", "ID")
         self.add_main_option("hoje", ord("d"), 0, 0, "Abrir (ou criar) a nota do dia", None)
         self.add_main_option("preferencias", ord("p"), 0, 0, "Abrir as preferências", None)
         self.add_main_option("listar", ord("l"), 0, 0, "Imprimir as notas em JSON e sair", None)
@@ -93,6 +94,9 @@ class App(Adw.Application):
                 self.activate()
         elif opcoes.get("nova"):
             self.nova_nota()
+        elif "reabrir" in opcoes:
+            if not self.reabrir_nota(opcoes["reabrir"]):
+                self.activate()
         elif "abrir" in opcoes:
             if not self.abrir_nota(opcoes["abrir"]):
                 self.activate()
@@ -122,6 +126,14 @@ class App(Adw.Application):
             return False
         self._janela(nota).present()
         return True
+
+    def reabrir_nota(self, id_: int) -> bool:
+        """Volta a nota para ativa e mostra."""
+        try:
+            self.repo.mudar_estado(id_, "ativa")
+        except KeyError:
+            return False
+        return self.abrir_nota(id_)
 
     def mostrar_captura(self):
         JanelaCaptura(self.capturar, self).present()

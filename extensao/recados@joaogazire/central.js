@@ -1,4 +1,5 @@
 // Lógica pura (sem GNOME Shell) da central de notas no painel.
+const ESTADOS = ['ativa', 'concluida', 'cancelada', 'arquivada'];
 const CORES = ['amarelo', 'azul', 'verde', 'rosa', 'roxo', 'cinza'];
 const MAX_TITULO = 60;
 const MAX_NOTAS = 200;
@@ -31,6 +32,7 @@ export function lerResumo(texto) {
                 pendentes: contagem(n.pendentes),
                 total: contagem(n.total),
                 texto: typeof n.texto === 'string' ? n.texto.slice(0, MAX_TEXTO) : '',
+                estado: ESTADOS.includes(n.estado) ? n.estado : 'ativa',
             };
         });
 }
@@ -99,4 +101,11 @@ export function buscar(notas, termo) {
         saida.push({...n, trecho});
     }
     return saida;
+}
+
+export function separarPorEstado(notas) {
+    const g = Object.fromEntries(ESTADOS.map(e => [e, []]));
+    for (const n of notas)
+        g[n.estado].push(n);
+    return g;
 }

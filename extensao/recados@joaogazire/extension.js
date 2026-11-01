@@ -9,7 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {idDaJanela, lerPosicoes, gravarPosicao, lerFixadas} from './posicoes.js';
-import {lerResumo, folhas, habitual, registrarAmostra, buscar} from './central.js';
+import {lerResumo, folhas, habitual, registrarAmostra, buscar, separarPorEstado} from './central.js';
 
 const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'recados']);
 const ATUALIZAR_S = 60;
@@ -139,6 +139,12 @@ class Central extends PanelMenu.Button {
         this.menu.addMenuItem(linhaBusca);
         this._secao = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._secao);
+        this._outros = {};
+        for (const [estado, rotulo] of [['concluida', 'Concluídas'], ['cancelada', 'Canceladas'], ['arquivada', 'Arquivadas']]) {
+            const sub = new PopupMenu.PopupSubMenuMenuItem(rotulo);
+            this._outros[estado] = {sub, rotulo};
+            this.menu.addMenuItem(sub);
+        }
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         const nova = new PopupMenu.PopupMenuItem('Nova nota');
         nova.connect('activate', () => rodar(['--nova']));
@@ -157,7 +163,21 @@ class Central extends PanelMenu.Button {
     // Lista das notas (filtrada pela busca) dentro da seção do menu.
     _listar() {
         this._secao.removeAll();
-        const achadas = buscar(this._notas, this._termo ?? '');
+        const grupos = separarPorEstado(this._notas);
+        const termo = this._termo ?? '';
+        // sem busca: só as ativas; com busca: procura em todas
+        const achadas = buscar(termo.trim() ? this._notas : grupos.ativa, termo);
+        for (const [estado, {sub, rotulo}] of Object.entries(this._outros)) {
+            const lista = grupos[estado];
+            sub.label.text = `${rotulo} (${lista.length})`;
+            sub.visible = lista.length > 0;
+            sub.menu.removeAll();
+            for (const n of lista) {
+                const item = new PopupMenu.PopupMenuItem(n.titulo);
+                item.connect('activate', () => rodar(['--reabrir', String(n.id)]));
+                sub.menu.addMenuItem(item);
+            }
+        }
         if (!achadas.length) {
             const vazio = this._notas.length ? 'Nada encontrado' : 'Nenhuma nota';
             this._secao.addMenuItem(new PopupMenu.PopupMenuItem(vazio, {reactive: false}));
@@ -178,13 +198,14 @@ class Central extends PanelMenu.Button {
                     y_align: Clutter.ActorAlign.CENTER,
                 }));
             }
-            item.connect('activate', () => rodar(['--abrir', String(n.id)]));
+            const args = n.estado === 'ativa' ? ['--abrir', String(n.id)] : ['--reabrir', String(n.id)];
+            item.connect('activate', () => rodar(args));
             this._secao.addMenuItem(item);
         }
     }
 
     _desenhar() {
-        const pendentes = this._notas.reduce((acc, n) => acc + n.pendentes, 0);
+        const pendentes = separarPorEstado(this._notas).ativa.reduce((acc, n) => acc + n.pendentes, 0);
         const hoje = GLib.DateTime.new_now_local().format('%Y-%m-%d');
         const historico = registrarAmostra(lerArquivo(HISTORICO), hoje, pendentes);
         gravarArquivo(HISTORICO, historico);

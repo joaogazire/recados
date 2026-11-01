@@ -51,7 +51,7 @@ def pedir_deepseek(texto: str) -> str:
 def atualizar(repo: Repositorio, pedir: Callable[[str], str] = pedir_deepseek) -> int:
     """Resume as notas cujo texto mudou desde o último resumo. Devolve quantas resumiu."""
     feitos = 0
-    for n in repo.listar():
+    for n in repo.listar(estado=None):  # concluídas/arquivadas também aparecem na central
         if not n.texto.strip():
             continue
         h = assinatura(n.texto)

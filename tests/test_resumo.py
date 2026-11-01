@@ -22,7 +22,7 @@ def test_resumo_conta_pendentes(tmp_path):
     r.criar("ideia solta")
     itens = resumo(r)
     r.fechar()
-    assert {k: v for k, v in itens[0].items() if k != "texto"} == {"id": 1, "titulo": "Lista", "cor": "azul", "pendentes": 2, "total": 3}
+    assert {k: v for k, v in itens[0].items() if k not in ("texto", "estado")} == {"id": 1, "titulo": "Lista", "cor": "azul", "pendentes": 2, "total": 3}
     assert itens[1]["pendentes"] == 0 and itens[1]["total"] == 0
 
 
