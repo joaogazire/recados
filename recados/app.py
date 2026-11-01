@@ -13,7 +13,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from recados.janela import JanelaNota  # noqa: E402
-from recados.notas import FONTES, TAMANHOS, Repositorio  # noqa: E402
+from recados.notas import FONTES, TAMANHOS, Repositorio, rascunho  # noqa: E402
 from recados import preferencias  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
 
@@ -80,7 +80,7 @@ class App(Adw.Application):
         return 0
 
     def _notas_abertas(self) -> dict:
-        return {j.nota.id: j for j in self.get_windows() if isinstance(j, JanelaNota)}
+        return {j.nota.id: j for j in self.get_windows() if isinstance(j, JanelaNota) and j.nota.id is not None}
 
     def do_activate(self):
         """Mostra todas as notas: traz as abertas para a frente e reabre as fechadas."""
@@ -108,7 +108,7 @@ class App(Adw.Application):
                 self._janela(n).present()
         p = preferencias.carregar()
         largura, altura = TAMANHOS[p["tamanho"]]
-        nota = self.repo.atualizar(self.repo.criar().id, fonte=p["fonte"], largura=largura, altura=altura)
+        nota = rascunho(fonte=p["fonte"], largura=largura, altura=altura)
         j = self._janela(nota)
         j.present()
         j.editor.grab_focus()

@@ -1,6 +1,8 @@
 """Janela de uma nota: editor Markdown, cor, recolher, salvar sozinho."""
 from __future__ import annotations
 
+from dataclasses import replace
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -11,7 +13,7 @@ from gi.repository import GLib, Gtk, GtkSource, Pango  # noqa: E402
 from recados.markdown import alternar_item, blocos, para_pango, realces  # noqa: E402
 from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
 
-ATRASO_SALVAR_MS = 400
+ATRASO_SALVAR_MS = 5000  # salva 5 s depois da última alteração (e sempre ao fechar)
 DESFAZER_MS = 5000
 _NOMES_FONTE = {"sans": "Sans", "serifa": "Serifa", "mono": "Mono"}
 
@@ -32,7 +34,7 @@ _ESTILO_TAGS = {
 class JanelaNota(Gtk.Window):
     def __init__(self, repo: Repositorio, nota: Nota, app: Gtk.Application | None = None,
                  ler: bool = True):
-        super().__init__(application=app, title=f"Post-it {nota.id}", decorated=False)
+        super().__init__(application=app, title=self._titulo(nota), decorated=False)
         self.repo = repo
         self.nota = nota
         self._salvar_id = 0
@@ -176,20 +178,37 @@ class JanelaNota(Gtk.Window):
             GLib.source_remove(self._salvar_id)
             self._salvar_id = 0
         texto = self.texto()
-        if texto != self.nota.texto:
+        if self.nota.id is None:
+            if texto.strip():
+                n = self.nota
+                nova = self.repo.criar(texto, n.cor)
+                self.nota = self.repo.atualizar(nova.id, fonte=n.fonte, largura=n.largura,
+                                                altura=n.altura, recolhida=n.recolhida)
+                self.set_title(self._titulo(self.nota))
+        elif texto != self.nota.texto:
             self.nota = self.repo.atualizar(self.nota.id, texto=texto)
 
+    @staticmethod
+    def _titulo(nota: Nota) -> str:
+        return "Post-it" if nota.id is None else f"Post-it {nota.id}"
+
+    def _mudar(self, **campos) -> Nota:
+        """Grava no banco; num rascunho só guarda na memória até ele ganhar texto."""
+        if self.nota.id is None:
+            return replace(self.nota, **campos)
+        return self.repo.atualizar(self.nota.id, **campos)
+
     def definir_cor(self, cor: str) -> None:
-        self.nota = self.repo.atualizar(self.nota.id, cor=cor)
+        self.nota = self._mudar(cor=cor)
         self._aplicar_cor(cor)
 
     def definir_fonte(self, fonte: str) -> None:
-        self.nota = self.repo.atualizar(self.nota.id, fonte=fonte)
+        self.nota = self._mudar(fonte=fonte)
         self._aplicar_fonte(fonte)
 
     def definir_tamanho(self, preset: str) -> None:
         largura, altura = TAMANHOS[preset]
-        self.nota = self.repo.atualizar(self.nota.id, largura=largura, altura=altura)
+        self.nota = self._mudar(largura=largura, altura=altura)
         if not self.nota.recolhida and not self.apagando:
             self.set_default_size(largura, altura)
 
@@ -204,7 +223,7 @@ class JanelaNota(Gtk.Window):
         recolhida = not self.nota.recolhida
         if recolhida:
             self._guardar_tamanho()
-        self.nota = self.repo.atualizar(self.nota.id, recolhida=recolhida)
+        self.nota = self._mudar(recolhida=recolhida)
         self._mostrar_corpo()
         if recolhida:
             self.set_default_size(self.nota.largura, 1)
@@ -240,6 +259,9 @@ class JanelaNota(Gtk.Window):
         if self.apagando:
             return
         self.salvar_agora()
+        if self.nota.id is None:  # rascunho vazio: não há o que apagar nem desfazer
+            self.destroy()
+            return
         self.repo.apagar(self.nota.id)
         self.apagando = True
         self._mostrar_corpo()
@@ -346,7 +368,7 @@ class JanelaNota(Gtk.Window):
     def _guardar_tamanho(self) -> None:
         l, a = self.get_width(), self.get_height()
         if l > 50 and a > 50 and (l, a) != (self.nota.largura, self.nota.altura):
-            self.nota = self.repo.atualizar(self.nota.id, largura=l, altura=a)
+            self.nota = self._mudar(largura=l, altura=a)
 
     def _ao_fechar(self, *_):
         if self.apagando:

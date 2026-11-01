@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS notas (
 
 @dataclass(frozen=True)
 class Nota:
-    id: int
+    id: int | None  # None = rascunho, ainda fora do banco
     texto: str
     cor: str
     x: int | None
@@ -45,6 +45,12 @@ class Nota:
     criada: float
     editada: float
     fonte: str = "sans"
+
+
+def rascunho(cor: str = "amarelo", fonte: str = "sans", largura: int = 260, altura: int = 220) -> Nota:
+    """Nota nova que só vai para o banco quando ganhar texto."""
+    return Nota(id=None, texto="", cor=cor, x=None, y=None, largura=largura, altura=altura,
+                recolhida=False, sempre_no_topo=False, criada=0.0, editada=0.0, fonte=fonte)
 
 
 def _checar_cor(cor: str) -> None:
