@@ -202,3 +202,16 @@ def test_apagar_rascunho_so_fecha(repo):
     j = JanelaNota(repo, _rascunho())
     j.apagar()
     assert repo.listar() == []
+
+
+def test_alfinete_fixa_e_grava_arquivo(repo, tmp_path, monkeypatch):
+    import json
+    destino = tmp_path / "fixadas.json"
+    monkeypatch.setenv("RECADOS_FIXADAS", str(destino))
+    n = repo.criar("oi")
+    j = JanelaNota(repo, n)
+    j.alternar_fixada()
+    assert repo.obter(n.id).sempre_no_topo is True and j.has_css_class("fixada")
+    assert json.loads(destino.read_text()) == [n.id]
+    j.alternar_fixada()
+    assert json.loads(destino.read_text()) == []
