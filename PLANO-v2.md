@@ -44,6 +44,9 @@ Em ordem de esforço, do menor para o maior. Os tempos são de relógio, com o S
 ## Total
 Cerca de 5 h 30 de relógio. Os passos que dependem de você ficam fora dessa conta: autorizar o Google (1 min) e esperar o download do modelo do Whisper (2 a 5 min).
 
+## Status (01/11, fim do dia)
+TODOS FEITOS: 1 (f99886c), 2+2b (9964bd6), 3 (45258c7), 4 (9f67772), 5 (aa24ec0), 6 (1f71476). 117 pytest.
+
 ## Decisão (01/11)
 Agora: itens 1, 2 e 2b. Depois: 3, 4, 5 e 6 (voz do jeito descrito acima).
 
