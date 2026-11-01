@@ -64,8 +64,7 @@ def test_realce_aplica_tag_negrito(repo):
 
 def test_modo_leitura_mostra_checkbox_e_clicar_salva(repo):
     n = repo.criar("# T\n- [ ] pão")
-    j = JanelaNota(repo, n)
-    j.alternar_leitura()
+    j = JanelaNota(repo, n)  # nota com texto já abre em leitura
     assert j.em_leitura and not j.rolagem.get_visible() and j.leitura.get_visible()
     caixas = j.caixas_leitura()
     assert len(caixas) == 1 and not caixas[0].get_active()

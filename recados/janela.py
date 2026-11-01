@@ -80,6 +80,9 @@ class JanelaNota(Gtk.Window):
 
         self._aplicar_cor(nota.cor)
         self._aplicar_fonte(nota.fonte)
+        if nota.texto.strip():  # nota com conteúdo abre para ler; vazia abre para escrever
+            self.em_leitura = True
+            self._montar_leitura()
         self._mostrar_corpo()
         self.connect("close-request", self._ao_fechar)
         atalhos = Gtk.ShortcutController(scope=Gtk.ShortcutScope.MANAGED)
