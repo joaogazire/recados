@@ -67,3 +67,21 @@ def test_lembrete_passado_nao_vai_pra_agenda(repo, tmp_path):
 
 def test_token_ausente_desliga_sincronizacao(tmp_path):
     assert gagenda.cliente_do_token(tmp_path / "nao-existe.json") is None
+
+
+def test_evento_que_passou_fica_no_google(repo, tmp_path):
+    from datetime import timedelta
+    estado = tmp_path / "agenda.json"
+    g = Falso()
+    repo.criar("- [ ] dentista @01/11 16h")
+    gagenda.sincronizar(repo, g, estado, AGORA)
+    assert len(g.eventos) == 1
+    gagenda.sincronizar(repo, g, estado, AGORA + timedelta(hours=3))
+    assert len(g.eventos) == 1 and not any(c[0] == "apagar" for c in g.chamadas)
+
+
+def test_dois_lembretes_com_mesmo_titulo(repo, tmp_path):
+    g = Falso()
+    repo.criar("- [ ] remédio @02/11 8h\n- [ ] remédio @02/11 20h")
+    gagenda.sincronizar(repo, g, tmp_path / "agenda.json", AGORA)
+    assert len(g.eventos) == 2

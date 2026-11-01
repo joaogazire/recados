@@ -10,6 +10,14 @@ function contagem(v) {
     return Number.isInteger(v) && v >= 0 ? v : 0;
 }
 
+function lerLembretes(v) {
+    if (!Array.isArray(v))
+        return [];
+    return v.slice(0, 20).filter(l => l && typeof l === 'object' && typeof l.quando === 'string' &&
+        Number.isFinite(Date.parse(l.quando)) && typeof l.titulo === 'string')
+        .map(l => ({quando: Date.parse(l.quando), titulo: l.titulo.slice(0, MAX_TITULO), feito: l.feito === true}));
+}
+
 export function lerResumo(texto) {
     let dados;
     try {
@@ -33,6 +41,7 @@ export function lerResumo(texto) {
                 total: contagem(n.total),
                 texto: typeof n.texto === 'string' ? n.texto.slice(0, MAX_TEXTO) : '',
                 estado: ESTADOS.includes(n.estado) ? n.estado : 'ativa',
+                lembretes: lerLembretes(n.lembretes),
             };
         });
 }
@@ -108,4 +117,26 @@ export function separarPorEstado(notas) {
     for (const n of notas)
         g[n.estado].push(n);
     return g;
+}
+
+// --- Lembretes na central: vencidos (não feitos, já passou) e próximos 7 dias ---
+const SEMANA_MS = 7 * 24 * 3600 * 1000;
+
+export function agendaDaCentral(notas, agoraMs) {
+    const vencidos = [], proximos = [];
+    for (const n of notas) {
+        if (n.estado !== 'ativa')
+            continue;
+        for (const l of n.lembretes) {
+            if (l.feito)
+                continue;
+            const item = {id: n.id, titulo: l.titulo, quando: l.quando};
+            if (l.quando <= agoraMs)
+                vencidos.push(item);
+            else if (l.quando <= agoraMs + SEMANA_MS)
+                proximos.push(item);
+        }
+    }
+    const ordem = (a, b) => a.quando - b.quando;
+    return {vencidos: vencidos.sort(ordem), proximos: proximos.sort(ordem)};
 }

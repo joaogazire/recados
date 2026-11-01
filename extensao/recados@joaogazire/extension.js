@@ -9,7 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {idDaJanela, lerPosicoes, gravarPosicao, lerFixadas} from './posicoes.js';
-import {lerResumo, folhas, habitual, registrarAmostra, buscar, separarPorEstado} from './central.js';
+import {lerResumo, folhas, habitual, registrarAmostra, buscar, separarPorEstado, agendaDaCentral} from './central.js';
 
 const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'recados']);
 const ATUALIZAR_S = 60;
@@ -137,6 +137,8 @@ class Central extends PanelMenu.Button {
         const linhaBusca = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         linhaBusca.add_child(this._busca);
         this.menu.addMenuItem(linhaBusca);
+        this._agenda = new PopupMenu.PopupMenuSection();
+        this.menu.addMenuItem(this._agenda);
         this._secao = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._secao);
         this._outros = {};
@@ -161,7 +163,25 @@ class Central extends PanelMenu.Button {
     }
 
     // Lista das notas (filtrada pela busca) dentro da seção do menu.
+    // Lembretes: vencidos (em vermelho) e os próximos 7 dias, até 5 no total.
+    _listarAgenda() {
+        this._agenda.removeAll();
+        const {vencidos, proximos} = agendaDaCentral(this._notas, Date.now());
+        const itens = [...vencidos.map(l => [l, true]), ...proximos.map(l => [l, false])].slice(0, 5);
+        for (const [l, atrasado] of itens) {
+            const d = GLib.DateTime.new_from_unix_local(Math.floor(l.quando / 1000));
+            const item = new PopupMenu.PopupMenuItem(`⏰ ${d.format('%d/%m %H:%M')}  ${l.titulo}`);
+            if (atrasado)
+                item.label.add_style_class_name('recados-vencido');
+            item.connect('activate', () => rodar(['--abrir', String(l.id)]));
+            this._agenda.addMenuItem(item);
+        }
+        if (itens.length)
+            this._agenda.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+    }
+
     _listar() {
+        this._listarAgenda();
         this._secao.removeAll();
         const grupos = separarPorEstado(this._notas);
         const termo = this._termo ?? '';

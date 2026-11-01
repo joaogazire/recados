@@ -299,3 +299,22 @@ def test_reabrir_volta_para_ativa(repo, monkeypatch):
     monkeypatch.setattr(a, "_janela", lambda nota: type("J", (), {"present": lambda s: None})())
     assert a.reabrir_nota(n.id) is True
     assert repo.obter(n.id).estado == "ativa"
+
+
+def test_salvar_fixa_datas_relativas(repo, monkeypatch):
+    from datetime import date, timedelta
+    j = JanelaNota(repo, repo.criar(""), ler=False)
+    j.buffer.set_text("- [ ] ligar @amanhã 9h")
+    j.salvar_agora()
+    amanha = date.today() + timedelta(days=1)
+    assert repo.obter(j.nota.id).texto == f"- [ ] ligar @{amanha:%d/%m} 9h"
+    assert j.texto() == repo.obter(j.nota.id).texto
+
+
+def test_cursor_nao_pula_ao_fixar_data(repo):
+    j = JanelaNota(repo, repo.criar(""), ler=False)
+    j.buffer.set_text("@amanhã 9h ligar")
+    j.buffer.place_cursor(j.buffer.get_end_iter())
+    j.salvar_agora()
+    fim = j.buffer.get_iter_at_mark(j.buffer.get_insert()).get_offset()
+    assert fim == len(j.texto())

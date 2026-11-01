@@ -49,3 +49,8 @@ def test_offsets_em_caracteres_com_acento():
 def test_titulo_em_linha_do_meio():
     t = "a\n## b\nc"
     assert tags(t) == [("## b", "titulo2")]
+
+
+def test_realce_de_data():
+    from recados.markdown import realces
+    assert (6, 15, "data") in realces("ligar @02/11 9h")

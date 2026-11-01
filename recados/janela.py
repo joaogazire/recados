@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import replace
+from datetime import datetime
 
 import gi
 
@@ -12,6 +13,7 @@ gi.require_version("GtkSource", "5")
 from gi.repository import GLib, Gtk, GtkSource, Pango  # noqa: E402
 
 from recados import fixadas  # noqa: E402
+from recados.datas import fixar_datas  # noqa: E402
 from recados.markdown import alternar_item, blocos, para_pango, realces  # noqa: E402
 from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
 
@@ -31,6 +33,7 @@ _ESTILO_TAGS = {
     "caixa": {"family": "monospace", "weight": Pango.Weight.BOLD, "foreground": "rgba(0,0,0,0.6)"},
     "caixa-marcada": {"family": "monospace", "weight": Pango.Weight.BOLD, "foreground": "#2f7d32"},
     "marcador": {"weight": Pango.Weight.BOLD, "foreground": "rgba(0,0,0,0.55)"},
+    "data": {"weight": Pango.Weight.BOLD, "foreground": "#9c3d00", "background": "rgba(0,0,0,0.06)"},
 }
 
 
@@ -210,7 +213,15 @@ class JanelaNota(Gtk.Window):
         if self._salvar_id:
             GLib.source_remove(self._salvar_id)
             self._salvar_id = 0
-        texto = self.texto()
+        agora, antigo = datetime.now(), self.texto()
+        texto = fixar_datas(antigo, agora)
+        if texto != antigo:  # '@amanhã' vira '@02/11': mostra na tela também
+            cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert()).get_offset()
+            cursor = len(fixar_datas(antigo[:cursor], agora))  # desconta o que encolheu antes do cursor
+            self._trocar_texto(texto, min(cursor, len(texto)))
+            if self._salvar_id:  # a troca agendou outro salvamento: este já resolve
+                GLib.source_remove(self._salvar_id)
+                self._salvar_id = 0
         if self.nota.id is None:
             if texto.strip() and texto.strip() != self.modelo.strip():
                 n = self.nota

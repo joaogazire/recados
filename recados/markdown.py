@@ -32,7 +32,8 @@ def realces(texto: str) -> list[tuple[int, int, str]]:
         if livre(*m.span(1)):
             saida.append((m.start(1), m.end(1), "marcador"))
             ocupado.append(m.span(1))
-    for padrao, tag in ((_CODIGO, "codigo"), (_LINK, "link"), (_NEGRITO, "negrito"), (_ITALICO, "italico")):
+    from recados.datas import TOKEN as _DATA
+    for padrao, tag in ((_DATA, "data"), (_CODIGO, "codigo"), (_LINK, "link"), (_NEGRITO, "negrito"), (_ITALICO, "italico")):
         for m in padrao.finditer(texto):
             if livre(*m.span()):
                 saida.append((m.start(), m.end(), tag))
@@ -79,6 +80,7 @@ def blocos(texto: str) -> list[tuple]:
 _INLINE = re.compile(
     r"`(?P<cod>[^`\n]+)`"
     r"|\[(?P<lt>[^\]\n]+)\]\((?P<lu>https?://[^)\s]+)\)"
+    r"|(?P<data>(?<![\w@.])@(?:\d{1,2}/\d{1,2}(?:/\d{4})?|hoje|amanh[ãa])(?:\s+\d{1,2}h(?:\d{2})?)?)"
     r"|\*\*(?P<neg>[^*\n]+)\*\*|__(?P<neg2>[^_\n]+)__"
     r"|(?<![*\w])\*(?P<it>[^*\n]+)\*(?!\*)|(?<![_\w])_(?P<it2>[^_\n]+)_(?!\w)"
 )
@@ -90,7 +92,9 @@ def para_pango(linha: str) -> str:
     for m in _INLINE.finditer(linha):
         saida.append(escape(linha[pos:m.start()], quote=False))
         g = m.groupdict()
-        if g["cod"] is not None:
+        if g["data"] is not None:
+            saida.append(f'<span background="#00000018"><b>⏰ {escape(g["data"][1:], quote=False)}</b></span>')
+        elif g["cod"] is not None:
             saida.append(f"<tt>{escape(g['cod'], quote=False)}</tt>")
         elif g["lt"] is not None:
             saida.append(f'<a href="{escape(g["lu"])}">{escape(g["lt"], quote=False)}</a>')

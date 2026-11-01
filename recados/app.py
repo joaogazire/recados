@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import date
+from datetime import date, datetime
 import os
 import sys
 from pathlib import Path
@@ -21,7 +21,8 @@ from recados.captura import achar_inbox, acrescentar_item, capturar  # noqa: E40
 from recados.captura_janela import JanelaCaptura  # noqa: E402
 from recados.dia import nota_de_hoje, titulo_do_dia  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
-from recados import resumir  # noqa: E402
+from recados import gagenda, resumir  # noqa: E402
+from recados.lembretes import Avisador  # noqa: E402
 
 APP_ID = "io.github.joaowgf.Recados"
 
@@ -69,6 +70,15 @@ class App(Adw.Application):
         self._resumindo = False
         self._resumir()
         GLib.timeout_add_seconds(60, self._resumir)
+        dados = caminho_banco().parent
+        self._avisador = Avisador(dados / "avisados.json", self._avisar)
+        self._agenda_estado = dados / "agenda.json"
+        self._sincronizando = False
+        GLib.timeout_add_seconds(30, self._checar_lembretes)
+        self._checar_lembretes()
+        acao = Gio.SimpleAction.new("abrir", GLib.VariantType.new("i"))
+        acao.connect("activate", lambda _a, p: self.abrir_nota(p.get_int32()))
+        self.add_action(acao)
         acao = Gio.SimpleAction.new("nova", None)
         acao.connect("activate", lambda *_: self.nova_nota())
         self.add_action(acao)
@@ -180,6 +190,39 @@ class App(Adw.Application):
         j = self._janela(nota)
         j.present()
         j.editor.grab_focus()
+
+    def _avisar(self, nota, lembrete):
+        n = Gio.Notification.new(f"⏰ {lembrete.titulo}")
+        n.set_body(f"{lembrete.quando:%d/%m %H:%M} · Post-it {nota.id}")
+        n.set_default_action_and_target_value("app.abrir", GLib.Variant.new_int32(nota.id))
+        self.send_notification(f"lembrete-{nota.id}-{lembrete.linha}", n)
+
+    def _checar_lembretes(self):
+        """A cada 30 s: avisa lembretes vencidos e, numa thread, espelha no Google Agenda."""
+        try:
+            self._avisador.checar(self.repo, datetime.now())
+        except Exception as e:
+            print(f"recados: aviso falhou: {e}", file=sys.stderr)
+        if getattr(self, "_cliente_google", None) is None:
+            self._cliente_google = gagenda.cliente_do_token()  # guarda o access token entre rodadas
+        cliente = self._cliente_google
+        if not self._sincronizando and cliente is not None:
+            self._sincronizando = True
+
+            def trabalho():
+                repo = None
+                try:
+                    repo = Repositorio(caminho_banco())
+                    gagenda.sincronizar(repo, cliente, self._agenda_estado, datetime.now())
+                except Exception as e:  # sem internet, token vencido: tenta de novo em 30 s
+                    print(f"recados: Google Agenda falhou: {e}", file=sys.stderr)
+                finally:
+                    if repo is not None:
+                        repo.fechar()
+                    self._sincronizando = False
+
+            threading.Thread(target=trabalho, daemon=True).start()
+        return GLib.SOURCE_CONTINUE
 
     def _resumir(self):
         """Resume (DeepSeek) as notas que mudaram, numa thread com conexão própria ao banco."""

@@ -73,3 +73,10 @@ def test_resumo_velho_nao_aparece_depois_de_editar(repo):
     assert resumo(repo)[0]["titulo"] == "Lista do mercado"
     repo.atualizar(n.id, texto="# Farmácia amanhã cedo")
     assert resumo(repo)[0]["titulo"] == "Farmácia amanhã cedo"
+
+
+def test_listar_traz_lembretes(repo):
+    from recados.resumo import resumo
+    repo.criar("- [ ] dentista @06/11/2026 14h")
+    [l] = resumo(repo)[0]["lembretes"]
+    assert l == {"quando": "2026-11-06T14:00:00", "titulo": "dentista", "feito": False}

@@ -4,6 +4,9 @@ from __future__ import annotations
 import hashlib
 import re
 
+from datetime import datetime
+
+from recados.datas import extrair
 from recados.notas import Repositorio
 
 MAX_TITULO = 60
@@ -31,11 +34,14 @@ def resumo_local(texto: str) -> str:
 
 def resumo(repo: Repositorio) -> list[dict]:
     saida = []
+    agora = datetime.now()
     for n in repo.listar(estado=None):
         marcas = _ITEM.findall(n.texto)
         atual = n.resumo and n.resumo_de == assinatura(n.texto)  # resumo de um texto antigo não vale
         titulo = n.resumo if atual else resumo_local(n.texto)
         saida.append({"id": n.id, "titulo": titulo, "cor": n.cor,
                       "pendentes": marcas.count(" "), "total": len(marcas), "texto": n.texto[:2000],
-                      "estado": n.estado})
+                      "estado": n.estado,
+                      "lembretes": [{"quando": l.quando.isoformat(), "titulo": l.titulo, "feito": l.feito}
+                                    for l in extrair(n.texto, agora)][:20]})
     return saida
