@@ -92,3 +92,23 @@ def test_apagar_com_desfazer(repo):
     assert repo.obter(n.id) is None and j.apagando
     j.desfazer_apagar()
     assert repo.obter(n.id).texto == "x" and not j.apagando
+
+
+def test_trocar_fonte_salva_e_muda_classe(repo):
+    n = repo.criar()
+    j = JanelaNota(repo, n)
+    assert j.has_css_class("fonte-sans")
+    j.definir_fonte("serifa")
+    assert repo.obter(n.id).fonte == "serifa"
+    assert j.has_css_class("fonte-serifa") and not j.has_css_class("fonte-sans")
+
+
+def test_preset_de_tamanho_salva_e_redimensiona(repo):
+    from recados.janela import TAMANHOS
+    n = repo.criar()
+    j = JanelaNota(repo, n)
+    larg, alt = TAMANHOS["G"]
+    j.definir_tamanho("G")
+    assert (repo.obter(n.id).largura, repo.obter(n.id).altura) == (larg, alt)
+    assert j.get_default_size() == (larg, alt)
+    assert len(TAMANHOS) >= 3

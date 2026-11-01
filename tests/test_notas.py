@@ -92,3 +92,27 @@ def test_persiste_entre_aberturas(tmp_path):
     r2 = Repositorio(caminho)
     assert r2.obter(n.id).texto == "fica"
     r2.fechar()
+
+
+def test_fonte_padrao_sans_e_troca(repo):
+    from recados.notas import FONTES
+    n = repo.criar()
+    assert n.fonte == "sans" and set(FONTES) >= {"sans", "serifa", "mono"}
+    assert repo.atualizar(n.id, fonte="mono").fonte == "mono"
+    with pytest.raises(ValueError):
+        repo.atualizar(n.id, fonte="comic")
+
+
+def test_banco_antigo_ganha_coluna_fonte(tmp_path):
+    import sqlite3
+    p = tmp_path / "velho.db"
+    db = sqlite3.connect(p)
+    db.execute("CREATE TABLE notas (id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT NOT NULL DEFAULT '',"
+               " cor TEXT NOT NULL DEFAULT 'amarelo', x INTEGER, y INTEGER, largura INTEGER NOT NULL DEFAULT 260,"
+               " altura INTEGER NOT NULL DEFAULT 220, recolhida INTEGER NOT NULL DEFAULT 0,"
+               " sempre_no_topo INTEGER NOT NULL DEFAULT 0, criada REAL NOT NULL, editada REAL NOT NULL, apagada REAL)")
+    db.execute("INSERT INTO notas (texto, criada, editada) VALUES ('oi', 1, 1)")
+    db.commit(); db.close()
+    r = Repositorio(p)
+    assert r.listar()[0].fonte == "sans"
+    r.fechar()
