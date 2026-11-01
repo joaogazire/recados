@@ -10,3 +10,9 @@ window.recado .editor { font-family: "Noto Sans", sans-serif; font-size: 11pt; c
 .cor-rosa    { background-color: #fbcfe8; }
 .cor-roxo    { background-color: #ddd6fe; }
 .cor-cinza   { background-color: #e5e7eb; }
+window.recado .leitura label { color: #222; }
+window.recado .leitura .titulo1 { font-weight: bold; font-size: 1.5em; }
+window.recado .leitura .titulo2 { font-weight: bold; font-size: 1.3em; }
+window.recado .leitura .titulo3 { font-weight: bold; font-size: 1.15em; }
+window.recado .leitura .feito { color: rgba(0,0,0,.45); text-decoration: line-through; }
+window.recado .aviso { min-height: 30px; color: #222; }

@@ -37,6 +37,7 @@ class App(Adw.Application):
             Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
         self.repo = Repositorio(caminho_banco())
+        self.repo.purgar_apagadas()  # o desfazer só vale enquanto o app está aberto
         acao = Gio.SimpleAction.new("nova", None)
         acao.connect("activate", lambda *_: self.nova_nota())
         self.add_action(acao)
