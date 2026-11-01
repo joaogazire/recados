@@ -30,7 +30,7 @@ _ESTILO_TAGS = {
 
 class JanelaNota(Gtk.Window):
     def __init__(self, repo: Repositorio, nota: Nota, app: Gtk.Application | None = None):
-        super().__init__(application=app, title="Recado", decorated=False)
+        super().__init__(application=app, title=f"Recado {nota.id}", decorated=False)
         self.repo = repo
         self.nota = nota
         self._salvar_id = 0

@@ -1,0 +1,6 @@
+{
+  "uuid": "recados@joaogazire",
+  "name": "Recados",
+  "description": "Lembra onde cada post-it do Recados fica na tela.",
+  "shell-version": ["50"]
+}
