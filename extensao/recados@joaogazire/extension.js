@@ -15,6 +15,7 @@ const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 're
 const ATUALIZAR_S = 60;
 const HISTORICO = GLib.build_filenamev([GLib.get_user_data_dir(), 'recados', 'pendentes-por-dia.json']);
 const TAM = 18;
+const GRAVANDO = GLib.build_filenamev([GLib.get_user_data_dir(), 'recados', 'voz', 'gravando']);
 
 function lerArquivo(caminho) {
     try {
@@ -42,7 +43,10 @@ function desenharPilha(area, pilha) {
     for (let i = pilha.n - 1; i >= 0; i--) {
         const x = i * passo, y = h - lado - i * passo;
         cr.rectangle(x + 0.5, y + 0.5, lado - 1, lado - 1);
-        cr.setSourceRGBA(0.996, 0.941, 0.541, i ? 0.8 : 1);
+        if (pilha.gravando)
+            cr.setSourceRGBA(0.93, 0.27, 0.24, i ? 0.8 : 1);  // vermelho: gravando ideia por voz
+        else
+            cr.setSourceRGBA(0.996, 0.941, 0.541, i ? 0.8 : 1);
         cr.fillPreserve();
         cr.setSourceRGBA(0.79, 0.72, 0.29, 1);
         cr.setLineWidth(1);
@@ -81,6 +85,14 @@ class Central extends PanelMenu.Button {
         this._notas = [];
         this._ocupado = false;
         this._montarMenu();
+        this._gravando = GLib.file_test(GRAVANDO, GLib.FileTest.EXISTS);
+        GLib.mkdir_with_parents(GLib.path_get_dirname(GRAVANDO), 0o700);
+        this._monitorVoz = Gio.File.new_for_path(GRAVANDO).monitor_file(Gio.FileMonitorFlags.NONE, null);
+        this._monitorVoz.connect('changed', () => {
+            this._gravando = GLib.file_test(GRAVANDO, GLib.FileTest.EXISTS);
+            this._pilha = {...this._pilha, gravando: this._gravando};
+            this._icone.queue_repaint();
+        });
         this._desenhar();
         this.menu.connect('open-state-changed', (_m, aberto) => {
             if (aberto) {
@@ -95,7 +107,10 @@ class Central extends PanelMenu.Button {
             this.atualizar();
             return GLib.SOURCE_CONTINUE;
         });
-        this.connect('destroy', () => GLib.source_remove(this._timer));
+        this.connect('destroy', () => {
+            GLib.source_remove(this._timer);
+            this._monitorVoz.cancel();
+        });
         this.atualizar();
     }
 
@@ -229,7 +244,7 @@ class Central extends PanelMenu.Button {
         const hoje = GLib.DateTime.new_now_local().format('%Y-%m-%d');
         const historico = registrarAmostra(lerArquivo(HISTORICO), hoje, pendentes);
         gravarArquivo(HISTORICO, historico);
-        this._pilha = folhas(pendentes, habitual(historico));
+        this._pilha = {...folhas(pendentes, habitual(historico)), gravando: this._gravando ?? false};
         this._icone.queue_repaint();
         this.accessible_name = `Post-it: ${pendentes} tarefas pendentes`;
         this._listar();

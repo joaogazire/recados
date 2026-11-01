@@ -34,18 +34,23 @@ def chave(caminho: Path | None = None) -> str | None:
     return k if isinstance(k, str) and k else None
 
 
-def pedir_deepseek(texto: str) -> str:
+def conversar(sistema: str, texto: str, max_tokens: int = 30, limite: int = MAX_TEXTO) -> str:
+    """Uma pergunta ao DeepSeek pelo proxy local; devolve o texto da resposta."""
     k = chave()
     if not k:
         raise OSError("sem chave do DeepSeek")
     corpo = json.dumps({
-        "model": MODELO, "temperature": 0.2, "max_tokens": 30,
-        "messages": [{"role": "system", "content": _PROMPT}, {"role": "user", "content": texto[:MAX_TEXTO]}],
+        "model": MODELO, "temperature": 0.2, "max_tokens": max_tokens,
+        "messages": [{"role": "system", "content": sistema}, {"role": "user", "content": texto[:limite]}],
     }).encode()
     req = urllib.request.Request(PROXY, data=corpo, method="POST", headers={
         "Content-Type": "application/json", "Authorization": f"Bearer {k}"})
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read(64 * 1024))["choices"][0]["message"]["content"]
+
+
+def pedir_deepseek(texto: str) -> str:
+    return conversar(_PROMPT, texto)
 
 
 def atualizar(repo: Repositorio, pedir: Callable[[str], str] = pedir_deepseek) -> int:

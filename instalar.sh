@@ -35,9 +35,10 @@ if uuid not in atual:
     subprocess.check_call(["gsettings", "set", "org.gnome.shell", "enabled-extensions", str(atual + [uuid])])
 PY
 
-# Atalho global Super+Alt+N -> captura rápida (acrescenta sem apagar os outros)
-BASE=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/recados/
-python3 - "$BASE" <<'PY'
+# Atalhos globais (acrescenta sem apagar os outros): Super+Alt+N captura rápida, Super+Alt+V ideia por voz
+atalho() {  # atalho <id> <nome> <comando> <tecla>
+	local BASE=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$1/
+	python3 - "$BASE" <<'PY'
 import ast, subprocess, sys
 base = sys.argv[1]
 chave = "org.gnome.settings-daemon.plugins.media-keys"
@@ -45,9 +46,12 @@ atual = ast.literal_eval(subprocess.check_output(["gsettings", "get", chave, "cu
 if base not in atual:
     subprocess.check_call(["gsettings", "set", chave, "custom-keybindings", str(atual + [base])])
 PY
-S="org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BASE"
-gsettings set "$S" name 'Post-it: captura rápida'
-gsettings set "$S" command "$HOME/.local/bin/recados --capturar"
-gsettings set "$S" binding '<Super><Alt>n'
+	local S="org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BASE"
+	gsettings set "$S" name "$2"
+	gsettings set "$S" command "$3"
+	gsettings set "$S" binding "$4"
+}
+atalho recados 'Post-it: captura rápida' "$HOME/.local/bin/recados --capturar" '<Super><Alt>n'
+atalho recados-voz 'Post-it: ideia por voz' "$HOME/.local/bin/recados --voz" '<Super><Alt>v'
 
 echo "Post-it instalado. Saia e entre na sessão uma vez para o GNOME carregar a extensão."

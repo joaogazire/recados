@@ -46,3 +46,9 @@ def test_alternar_grava_e_para(tmp_path):
     assert v.alternar() == "parado" and not (tmp_path / "gravando").exists()
     assert g.eventos == ["iniciar", "parar"]
     assert v.ultimo_audio.parent == tmp_path
+
+
+def test_limpar_flag_orfa(tmp_path):
+    (tmp_path / "gravando").touch()
+    voz.limpar_flag(tmp_path)
+    assert not (tmp_path / "gravando").exists()

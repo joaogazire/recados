@@ -21,7 +21,7 @@ from recados.captura import achar_inbox, acrescentar_item, capturar  # noqa: E40
 from recados.captura_janela import JanelaCaptura  # noqa: E402
 from recados.dia import nota_de_hoje, titulo_do_dia  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
-from recados import gagenda, resumir  # noqa: E402
+from recados import gagenda, resumir, voz  # noqa: E402
 from recados.lembretes import Avisador  # noqa: E402
 
 APP_ID = "io.github.joaowgf.Recados"
@@ -37,11 +37,14 @@ class App(Adw.Application):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.repo: Repositorio | None = None
         self._rascunho_dia = None  # janela da nota do dia ainda não salva (evita abrir duas)
+        self._voz = None
+        self._voz_limite = 0  # timer que para a gravação depois de MAX_GRAVACAO_S
         self.add_main_option("nova", ord("n"), 0, 0, "Criar uma nota nova", None)
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
         self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
         self.add_main_option("capturar", ord("c"), 0, 0, "Captura rápida: uma linha para a Inbox", None)
         self.add_main_option("reabrir", 0, 0, GLib.OptionArg.INT, "Reabrir nota concluída/cancelada/arquivada", "ID")
+        self.add_main_option("voz", ord("v"), 0, 0, "Gravar uma ideia falada (de novo para parar)", None)
         self.add_main_option("hoje", ord("d"), 0, 0, "Abrir (ou criar) a nota do dia", None)
         self.add_main_option("preferencias", ord("p"), 0, 0, "Abrir as preferências", None)
         self.add_main_option("listar", ord("l"), 0, 0, "Imprimir as notas em JSON e sair", None)
@@ -67,6 +70,7 @@ class App(Adw.Application):
         self.repo = Repositorio(caminho_banco())
         self.repo.purgar_apagadas()  # o desfazer só vale enquanto o app está aberto
         fixadas.gravar(self.repo)
+        voz.limpar_flag(caminho_banco().parent / "voz")  # sobra de um app que fechou gravando
         self._resumindo = False
         self._resumir()
         GLib.timeout_add_seconds(60, self._resumir)
@@ -93,7 +97,9 @@ class App(Adw.Application):
 
     def do_command_line(self, linha):
         opcoes = linha.get_options_dict().end().unpack()
-        if opcoes.get("capturar"):
+        if opcoes.get("voz"):
+            self.alternar_voz()
+        elif opcoes.get("capturar"):
             self.mostrar_captura()
         elif opcoes.get("hoje"):
             self.nota_do_dia()
@@ -144,6 +150,60 @@ class App(Adw.Application):
         except KeyError:
             return False
         return self.abrir_nota(id_)
+
+    MAX_GRAVACAO_S = 300
+
+    def alternar_voz(self):
+        """1º toque grava; 2º para, transcreve (Whisper local) e resume (DeepSeek) numa nota verde."""
+        if self._voz is None:
+            self._voz = voz.Voz(voz.Gravador(), caminho_banco().parent / "voz")
+        estado = self._voz.alternar()
+        if estado == "gravando":
+            self.hold()  # mantém o app vivo sem janela enquanto grava
+            n = Gio.Notification.new("🎙 Gravando ideia…")
+            n.set_body("Aperte Super+Alt+V de novo para parar (máx. 5 min).")
+            self.send_notification("voz", n)
+            self._voz_limite = GLib.timeout_add_seconds(self.MAX_GRAVACAO_S, self._voz_tempo_esgotado)
+            return
+        if self._voz_limite:
+            GLib.source_remove(self._voz_limite)
+            self._voz_limite = 0
+        self.withdraw_notification("voz")
+        audio = self._voz.ultimo_audio
+
+        def trabalho():
+            try:
+                texto = voz.processar(str(audio))
+            except Exception as e:
+                print(f"recados: voz falhou: {e}", file=sys.stderr)
+                texto = None
+            finally:
+                audio.unlink(missing_ok=True)
+            GLib.idle_add(self._fim_voz, texto)
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
+    def _voz_tempo_esgotado(self):
+        self._voz_limite = 0
+        if self._voz is not None and self._voz.gravando:
+            self.alternar_voz()
+        return GLib.SOURCE_REMOVE
+
+    def _fim_voz(self, texto):
+        try:
+            if texto:
+                self._nota_de_voz(texto)
+            else:
+                n = Gio.Notification.new("Não entendi a gravação")
+                n.set_body("Nenhuma fala reconhecida. Tente de novo mais perto do microfone.")
+                self.send_notification("voz", n)
+        finally:
+            self.release()
+        return GLib.SOURCE_REMOVE
+
+    def _nota_de_voz(self, texto: str):
+        nota = self.repo.criar(texto, "verde")
+        self.abrir_nota(nota.id)
 
     def mostrar_captura(self):
         JanelaCaptura(self.capturar, self).present()
@@ -289,6 +349,8 @@ class App(Adw.Application):
         janela.present()
 
     def do_shutdown(self):
+        if self._voz is not None and self._voz.gravando:
+            self._voz.alternar()  # para o pw-record e apaga a flag
         for j in self.get_windows():
             if isinstance(j, JanelaNota):
                 j.salvar_agora()
