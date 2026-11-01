@@ -150,10 +150,12 @@ def test_nova_nota_usa_fonte_e_tamanho_das_preferencias(repo, tmp_path, monkeypa
     a = modapp.App()
     a.repo = repo
     monkeypatch.setattr(a, "_notas_abertas", lambda: {0: object()})
-    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: type("J", (), {
-        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())
+    recebidas = []
+    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: (recebidas.append(nota), type("J", (), {
+        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())[1])
     a.nova_nota()
-    n = repo.listar()[-1]
+    n = recebidas[-1]
+    assert n.id is None and repo.listar() == []  # rascunho: só vai pro banco quando tiver texto
     assert n.fonte == "serifa" and (n.largura, n.altura) == TAMANHOS["G"]
 
 
@@ -164,3 +166,39 @@ def test_shutdown_ignora_janela_que_nao_e_nota(repo, monkeypatch):
     monkeypatch.setattr(a, "get_windows", lambda: [Gtk.Window()])
     monkeypatch.setattr("recados.app.Adw.Application.do_shutdown", lambda s: None)
     a.do_shutdown()
+
+
+def _rascunho(**campos):
+    from recados.notas import rascunho
+    return rascunho(**campos)
+
+
+def test_salva_a_cada_5_segundos():
+    from recados.janela import ATRASO_SALVAR_MS
+    assert ATRASO_SALVAR_MS == 5000
+
+
+def test_rascunho_vazio_fechado_nao_vai_pro_banco(repo):
+    j = JanelaNota(repo, _rascunho())
+    j.definir_cor("rosa")
+    j.salvar_agora()
+    j.close()
+    assert repo.listar() == []
+
+
+def test_rascunho_com_texto_vira_nota_com_as_escolhas(repo):
+    from recados.notas import TAMANHOS
+    j = JanelaNota(repo, _rascunho(fonte="mono"))
+    j.definir_cor("verde")
+    j.definir_tamanho("G")
+    j.buffer.set_text("comprar pão")
+    j.salvar_agora()
+    [n] = repo.listar()
+    assert (n.texto, n.cor, n.fonte, (n.largura, n.altura)) == ("comprar pão", "verde", "mono", TAMANHOS["G"])
+    assert j.nota.id == n.id and j.get_title() == f"Post-it {n.id}"
+
+
+def test_apagar_rascunho_so_fecha(repo):
+    j = JanelaNota(repo, _rascunho())
+    j.apagar()
+    assert repo.listar() == []
