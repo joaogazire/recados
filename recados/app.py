@@ -19,6 +19,8 @@ from recados.notas import FONTES, TAMANHOS, Repositorio, rascunho  # noqa: E402
 from recados import fixadas, preferencias  # noqa: E402
 from recados.captura import achar_inbox, acrescentar_item, capturar  # noqa: E402
 from recados.captura_janela import JanelaCaptura  # noqa: E402
+from recados.gravacao_janela import JanelaGravacao  # noqa: E402
+from recados.ao_vivo import ler_evento  # noqa: E402
 from recados.dia import nota_de_hoje, titulo_do_dia  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
 from recados import gagenda, resumir, voz  # noqa: E402
@@ -39,6 +41,10 @@ class App(Adw.Application):
         self._rascunho_dia = None  # janela da nota do dia ainda não salva (evita abrir duas)
         self._voz = None
         self._voz_limite = 0  # timer que para a gravação depois de MAX_GRAVACAO_S
+        self._voz_relogio = 0
+        self._voz_processando = False
+        self._janela_voz = None
+        self._ao_vivo = None
         self.add_main_option("nova", ord("n"), 0, 0, "Criar uma nota nova", None)
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
         self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
@@ -154,34 +160,81 @@ class App(Adw.Application):
     MAX_GRAVACAO_S = 300
 
     def alternar_voz(self):
-        """1º toque grava; 2º para, transcreve (Whisper local) e resume (DeepSeek) numa nota verde."""
+        """1º toque: abre a janela de gravação e vai transcrevendo ao vivo; 2º toque: para e resume numa nota."""
         if self._voz is None:
             self._voz = voz.Voz(voz.Gravador(), caminho_banco().parent / "voz")
+        if self._voz_processando:
+            return  # ainda resumindo a ideia anterior
         estado = self._voz.alternar()
         if estado == "gravando":
-            self.hold()  # mantém o app vivo sem janela enquanto grava
-            n = Gio.Notification.new("🎙 Gravando ideia…")
-            n.set_body("Aperte Super+Alt+V de novo para parar (máx. 5 min).")
-            self.send_notification("voz", n)
+            self.hold()  # mantém o app vivo mesmo sem nota aberta
+            audio = self._voz.ultimo_audio
+            self._janela_voz = JanelaGravacao(self.alternar_voz, self)
+            self._janela_voz.connect("close-request", self._fechar_janela_voz)
+            self._janela_voz.present()
+            self._voz_segundos = 0
+            self._voz_relogio = GLib.timeout_add_seconds(1, self._voz_tique)
             self._voz_limite = GLib.timeout_add_seconds(self.MAX_GRAVACAO_S, self._voz_tempo_esgotado)
-            return
-        if self._voz_limite:
-            GLib.source_remove(self._voz_limite)
-            self._voz_limite = 0
-        self.withdraw_notification("voz")
-        audio = self._voz.ultimo_audio
-
-        def trabalho():
             try:
-                texto = voz.processar(str(audio))
-            except Exception as e:
-                print(f"recados: voz falhou: {e}", file=sys.stderr)
-                texto = None
-            finally:
-                audio.unlink(missing_ok=True)
-            GLib.idle_add(self._fim_voz, texto)
+                self._ao_vivo = voz.iniciar_ao_vivo(audio)
+            except OSError as e:  # Whisper não instalado: grava e tenta transcrever tudo ao parar
+                print(f"recados: transcrição ao vivo indisponível: {e}", file=sys.stderr)
+                self._ao_vivo = None
+                self._janela_voz.mostrar_texto("(transcrição ao vivo indisponível: o texto vem ao parar)")
+                return
+            threading.Thread(target=self._ler_ao_vivo, args=(self._ao_vivo, audio), daemon=True).start()
+            return
+        for fonte in ("_voz_limite", "_voz_relogio"):
+            if getattr(self, fonte):
+                GLib.source_remove(getattr(self, fonte))
+                setattr(self, fonte, 0)
+        self._voz_processando = True
+        self._janela_voz.resumindo()
+        if self._ao_vivo is None:
+            threading.Thread(target=self._ler_ao_vivo, args=(None, self._voz.ultimo_audio), daemon=True).start()
+            return
+        try:
+            self._ao_vivo.stdin.close()  # avisa o Whisper: última passada e "final"
+        except OSError:
+            pass
 
-        threading.Thread(target=trabalho, daemon=True).start()
+    def _fechar_janela_voz(self, *_):
+        if self._voz is not None and self._voz.gravando:
+            self.alternar_voz()  # fechar a janela = parar e salvar
+            return True
+        return self._voz_processando  # resumindo: a janela some sozinha quando a nota ficar pronta
+
+    def _voz_tique(self):
+        self._voz_segundos += 1
+        self._janela_voz.tique(self._voz_segundos)
+        return GLib.SOURCE_CONTINUE
+
+    def _ler_ao_vivo(self, proc, audio):
+        """Thread: lê as parciais do Whisper; no 'final', resume no DeepSeek e cria a nota."""
+        fala = None
+        for linha in (proc.stdout if proc is not None else []):
+            ev = ler_evento(linha)
+            if ev is None:
+                continue
+            tipo, texto = ev
+            if tipo == "parcial":
+                GLib.idle_add(self._janela_voz.mostrar_texto, texto)
+            else:
+                fala = texto
+                break
+        if proc is not None:
+            proc.wait()
+        try:
+            if fala is None:  # o processo ao vivo morreu: transcreve o arquivo inteiro de uma vez
+                nota = voz.processar(str(audio))
+            else:
+                nota = voz.montar_nota(fala)
+        except Exception as e:
+            print(f"recados: voz falhou: {e}", file=sys.stderr)
+            nota = None
+        finally:
+            audio.unlink(missing_ok=True)
+        GLib.idle_add(self._fim_voz, nota)
 
     def _voz_tempo_esgotado(self):
         self._voz_limite = 0
@@ -190,6 +243,10 @@ class App(Adw.Application):
         return GLib.SOURCE_REMOVE
 
     def _fim_voz(self, texto):
+        self._voz_processando = False
+        if self._janela_voz is not None:
+            self._janela_voz.destroy()
+            self._janela_voz = None
         try:
             if texto:
                 self._nota_de_voz(texto)

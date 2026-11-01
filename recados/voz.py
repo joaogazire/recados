@@ -44,10 +44,21 @@ def transcrever_local(wav: str) -> str:
     return r.stdout.strip()
 
 
+def iniciar_ao_vivo(wav: Path) -> subprocess.Popen:
+    """Processo do Whisper que vai transcrevendo o .wav enquanto ele cresce (ver recados/ao_vivo.py)."""
+    env = {**os.environ, "PYTHONPATH": str(RAIZ)}
+    return subprocess.Popen([str(VENV_PY), "-m", "recados.ao_vivo", str(wav)], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env)
+
+
 def processar(wav: str, transcrever: Callable[[str], str] = transcrever_local,
               pedir: Callable[[str], str] = pedir_deepseek) -> str | None:
     """Texto da nota (resumo + transcrição), ou None se não houve fala."""
-    fala = " ".join(transcrever(wav).split())
+    return montar_nota(transcrever(wav), pedir)
+
+
+def montar_nota(fala: str, pedir: Callable[[str], str] = pedir_deepseek) -> str | None:
+    fala = " ".join(fala.split())
     if not fala:
         return None
     try:

@@ -52,3 +52,9 @@ def test_limpar_flag_orfa(tmp_path):
     (tmp_path / "gravando").touch()
     voz.limpar_flag(tmp_path)
     assert not (tmp_path / "gravando").exists()
+
+
+def test_montar_nota_a_partir_da_fala():
+    assert voz.montar_nota("  ", pedir=lambda t: "x") is None
+    t = voz.montar_nota("ligar pro banco", pedir=lambda t: "# Banco\n- [ ] ligar")
+    assert t == "# Banco\n- [ ] ligar\n\n---\nTranscrição: ligar pro banco"

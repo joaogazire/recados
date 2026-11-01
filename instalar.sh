@@ -54,4 +54,12 @@ PY
 atalho recados 'Post-it: captura rápida' "$HOME/.local/bin/recados --capturar" '<Super><Alt>n'
 atalho recados-voz 'Post-it: ideia por voz' "$HOME/.local/bin/recados --voz" '<Super><Alt>v'
 
+# Voz (Super+Alt+V): Whisper local num venv próprio (~470 MB; o modelo "small" baixa no 1º uso)
+VOZ="$HOME/.local/share/recados/voz-venv"
+if [ ! -x "$VOZ/bin/python" ] || ! "$VOZ/bin/python" -c "import faster_whisper" 2>/dev/null; then
+	echo "Instalando o Whisper para a ideia por voz (alguns minutos)..."
+	python3 -m venv "$VOZ"
+	"$VOZ/bin/pip" install -q faster-whisper numpy
+fi
+
 echo "Post-it instalado. Saia e entre na sessão uma vez para o GNOME carregar a extensão."

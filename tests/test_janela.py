@@ -343,3 +343,33 @@ def test_janela_de_gravacao_mostra_estado_e_texto():
     assert parar == [1]
     j.resumindo()
     assert "Resumindo" in j.status.get_label() and not j.botao_parar.get_sensitive()
+
+
+def test_voz_sem_whisper_nao_trava(repo, monkeypatch, tmp_path):
+    from recados import app as modapp, voz
+    a = modapp.App()
+    a.repo = repo
+    monkeypatch.setattr(a, "hold", lambda: None)
+    monkeypatch.setattr(a, "release", lambda: None)
+
+    class G:
+        def iniciar(self, c): c.write_bytes(b"")
+        def parar(self): pass
+    a._voz = voz.Voz(G(), tmp_path)
+
+    def quebra(_):
+        raise FileNotFoundError("sem venv")
+    monkeypatch.setattr(voz, "iniciar_ao_vivo", quebra)
+    monkeypatch.setattr(voz, "processar", lambda w: None)
+    fins = []
+    monkeypatch.setattr(a, "_fim_voz", lambda t: fins.append(t))
+    monkeypatch.setattr(modapp.GLib, "idle_add", lambda f, *args: f(*args))
+    a.alternar_voz()
+    assert "indisponível" in a._janela_voz.texto.get_label() or a._janela_voz is not None
+    a.alternar_voz()
+    import time
+    for _ in range(50):
+        if fins:
+            break
+        time.sleep(0.02)
+    assert fins == [None]
