@@ -27,7 +27,7 @@ sudo dnf install python3-gobject gtk4 libadwaita gtksourceview5 python3-numpy pi
 ### 2. Rodar o instalador
 
 ```bash
-git clone <este repositório> ~/Documentos/Code/recados   # ou use a pasta que já tem
+git clone https://github.com/joaogazire/recados.git ~/Documentos/Code/recados
 cd ~/Documentos/Code/recados
 ./instalar.sh
 ```
