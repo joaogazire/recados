@@ -64,7 +64,7 @@ gnome-extensions info recados@joaogazire   # deve mostrar "Estado: ACTIVE"
 
 | Ação | Como |
 |---|---|
-| Item novo num projeto | **Ctrl+N** numa nota, ou "Nova nota" no painel |
+| Nova nota | **Ctrl+N** numa nota, ou "Nova nota" no painel |
 | Mostrar todas | `recados`, ou "Mostrar todas" no painel |
 | Ler ↔ editar o Markdown | **Ctrl+E**, ou o ícone de olho |
 | Recolher só para a barra | Duplo clique na barra de cima |
@@ -87,15 +87,15 @@ A nota com texto abre no **modo leitura**: Markdown formatado e caixinhas que vo
 **negrito**  *itálico*  `código`  [link](https://...)
 ```
 
-### Projetos: Ctrl+N e Super+Alt+N
+### Projetos
 
-Cada projeto é uma nota `# Nome` com `## Fazer` e `## Feito`. Os dois atalhos abrem a mesma caixinha:
+Um projeto (Steamlog, Estante…) junta várias notas. Cada nota mostra o projeto na barra de cima.
 
-1. Escreva o que fazer. Para mais de um item, separe com `;`.
-2. **Enter**: com "Projeto automático", o Post-it escolhe o projeto. Se o nome dele aparece no texto (sem ligar para maiúsculas, acentos ou espaços: "Steam Log" = Steamlog), usa esse; senão pergunta ao DeepSeek, que só pode responder um projeto da lista. O que não tem relação com nenhum projeto vai para a **Inbox**.
-3. **Enter** de novo grava no fim de `## Fazer` do projeto. Dá para trocar o projeto na lista antes, inclusive para "+ Novo projeto…".
-
-Ctrl+N de dentro de um projeto já vem com esse projeto escolhido. Marcar um item `[x]` desce ele (com os subitens) para o topo de `## Feito`; desmarcar devolve para o fim de `## Fazer`. **Esc** cancela.
+- **Ctrl+N** cria uma nota livre. Uns 30 s depois que você para de digitar, o Post-it põe a nota num projeto. Se o nome do projeto aparece no texto (sem ligar para maiúsculas, acentos ou espaços: "Steam Log" = Steamlog), vai para ele. Se não, o DeepSeek escolhe entre os projetos que existem, vendo os títulos das notas de cada um. O que não tem relação com nenhum vai para a **Inbox**, e é reclassificado se o texto mudar.
+- Para trocar o projeto na mão: menu **⋮ → Projeto** (ou "Novo…"). A escolha manual nunca é mudada pelo DeepSeek.
+- No painel, cada projeto é um item que abre e mostra as notas dele, com quantas tarefas faltam. A Inbox fica por último.
+- **Super+Alt+N** abre uma caixinha de uma linha que acrescenta um item no `## Fazer` da nota principal do projeto (a que tem `## Fazer`). Para mais de um item, separe com `;`. Com "Projeto automático", o 1º **Enter** mostra o palpite e o 2º grava.
+- Marcar um item `[x]` numa nota com `## Fazer` desce ele para `## Feito`.
 
 ### Ideia por voz: **Super+Alt+V**
 

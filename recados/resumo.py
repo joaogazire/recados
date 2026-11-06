@@ -42,6 +42,7 @@ def resumo(repo: Repositorio) -> list[dict]:
         saida.append({"id": n.id, "titulo": titulo, "cor": n.cor,
                       "pendentes": marcas.count(" "), "total": len(marcas), "texto": n.texto[:2000],
                       "estado": "lixeira" if lixo else n.estado,
+                      "projeto": n.projeto or "Inbox",
                       "lembretes": [{"quando": l.quando.isoformat(), "titulo": l.titulo, "feito": l.feito}
                                     for l in extrair(n.texto, agora)][:20]})
     return saida

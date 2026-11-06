@@ -12,6 +12,14 @@ Pedido: "parar com essa questão de Inbox; filtrar por projeto e, dentro do proj
 ## Pré-requisito
 - Feito: trabalho de 02/11 commitado em 9517e16.
 
+## Mudança de modelo (05/11, 23h, pedido do usuário)
+"Pode voltar com o Ctrl+N pra criar nota rápida; o negócio é o DeepSeek categorizar. Um projeto pode ter várias notas: um toggle com o nome do projeto e as notas abaixo."
+- Colunas `projeto`, `projeto_de` (hash do texto classificado) e `projeto_manual` em cada nota.
+- Classificador no laço de 60 s (`projetos.classificar`): só notas sem projeto ou na Inbox, não manuais, com o texto mudado e paradas há 30 s. Palpite local (palavra inteira) → DeepSeek com os títulos de até 3 notas de cada projeto → Inbox. Nota que entra num projeto fica nele.
+- Rótulo do projeto na barra da nota + menu ⋮ → Projeto (vira manual).
+- Painel: `agruparPorProjeto`, um PopupSubMenu por projeto (Inbox por último); a busca continua plana.
+- Super+Alt+N e voz seguem com a caixinha (item no `## Fazer` da nota principal do projeto).
+
 ## Feito (05/11, noite)
 Decisões do usuário: as 3 recomendadas, e a Inbox fica, mas só para o que não tem relação com nenhum projeto.
 - Projeto = nota ativa `# Nome` com `## Fazer…` (sem coluna nova no banco). `recados/projetos.py`.

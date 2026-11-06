@@ -5,6 +5,7 @@ const MAX_TITULO = 60;
 const MAX_NOTAS = 200;
 const MAX_TEXTO = 2000;
 const MAX_TRECHO = 80;
+const INBOX = 'Inbox';
 
 function contagem(v) {
     return Number.isInteger(v) && v >= 0 ? v : 0;
@@ -42,6 +43,7 @@ export function lerResumo(texto) {
                 texto: typeof n.texto === 'string' ? n.texto.slice(0, MAX_TEXTO) : '',
                 estado: ESTADOS.includes(n.estado) ? n.estado : 'ativa',
                 lembretes: lerLembretes(n.lembretes),
+                projeto: typeof n.projeto === 'string' && n.projeto.trim() ? n.projeto.trim().slice(0, MAX_TITULO) : INBOX,
             };
         });
 }
@@ -110,6 +112,20 @@ export function buscar(notas, termo) {
         saida.push({...n, trecho});
     }
     return saida;
+}
+
+// Um toggle por projeto na central: [{projeto, notas, pendentes}], em ordem alfabética, Inbox por último.
+export function agruparPorProjeto(notas) {
+    const grupos = new Map();
+    for (const n of notas) {
+        if (!grupos.has(n.projeto))
+            grupos.set(n.projeto, {projeto: n.projeto, notas: [], pendentes: 0});
+        const g = grupos.get(n.projeto);
+        g.notas.push(n);
+        g.pendentes += n.pendentes;
+    }
+    return [...grupos.values()].sort((a, b) =>
+        (a.projeto === INBOX) - (b.projeto === INBOX) || a.projeto.localeCompare(b.projeto, 'pt-BR'));
 }
 
 export function separarPorEstado(notas) {

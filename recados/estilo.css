@@ -17,6 +17,7 @@ window.recado .leitura .titulo2 { font-weight: bold; font-size: 1.3em; }
 window.recado .leitura .titulo3 { font-weight: bold; font-size: 1.15em; }
 window.recado .leitura .feito { color: rgba(0,0,0,.45); text-decoration: line-through; }
 window.recado .barra .contador { font-size: 9pt; color: rgba(0,0,0,.55); margin-left: 4px; }
+window.recado .barra .projeto-rotulo { font-size: 9pt; color: rgba(0,0,0,.55); margin-left: 6px; padding: 0 6px; border-radius: 8px; background: rgba(0,0,0,.07); }
 window.recado .aviso { min-height: 30px; color: #222; }
 window.recado.fonte-sans .editor, window.recado.fonte-sans .leitura label, button.fonte-sans { font-family: "Noto Sans", sans-serif; }
 window.recado.fonte-serifa .editor, window.recado.fonte-serifa .leitura label, button.fonte-serifa { font-family: "Noto Serif", serif; }

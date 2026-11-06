@@ -9,7 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {idDaJanela, lerPosicoes, gravarPosicao, lerFixadas} from './posicoes.js';
-import {lerResumo, folhas, habitual, registrarAmostra, buscar, separarPorEstado, agendaDaCentral} from './central.js';
+import {lerResumo, folhas, habitual, registrarAmostra, buscar, separarPorEstado, agendaDaCentral, agruparPorProjeto} from './central.js';
 
 const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'recados']);
 const ATUALIZAR_S = 60;
@@ -228,28 +228,41 @@ class Central extends PanelMenu.Button {
             const vazio = this._notas.length ? 'Nada encontrado' : 'Nenhuma nota';
             this._secao.addMenuItem(new PopupMenu.PopupMenuItem(vazio, {reactive: false}));
         }
-        for (const n of achadas) {
-            const item = new PopupMenu.PopupBaseMenuItem();
-            item.add_child(new St.Widget({style_class: `recados-ponto recados-${n.cor}`, y_align: Clutter.ActorAlign.CENTER}));
-            const textos = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-            const marca = {lixeira: '🗑 Lixeira (clique restaura): ', concluida: '✓ ', cancelada: '✗ ', arquivada: '▣ '}[n.estado] ?? '';
-            textos.add_child(new St.Label({text: `${marca}${n.titulo}`}));
-            if (n.trecho)
-                textos.add_child(new St.Label({text: n.trecho, style_class: 'recados-trecho'}));
-            item.add_child(textos);
-            if (n.total) {
-                const feito = n.pendentes === 0;
-                item.add_child(new St.Label({
-                    text: feito ? `✓ ${n.total}` : `${n.total - n.pendentes}/${n.total}`,
-                    style_class: feito ? 'recados-feito' : 'recados-pendente',
-                    y_align: Clutter.ActorAlign.CENTER,
-                }));
+        if (!termo.trim()) {  // sem busca: um toggle por projeto, com as notas dele embaixo
+            for (const g of agruparPorProjeto(achadas)) {
+                const sub = new PopupMenu.PopupSubMenuMenuItem(
+                    g.pendentes ? `${g.projeto}  ·  ${g.pendentes} a fazer` : g.projeto);
+                for (const n of g.notas)
+                    sub.menu.addMenuItem(this._itemNota(n));
+                this._secao.addMenuItem(sub);
             }
-            const opcao = {ativa: '--abrir', lixeira: '--restaurar'}[n.estado] ?? '--reabrir';
-            const args = [opcao, String(n.id)];
-            item.connect('activate', () => rodar(args));
-            this._secao.addMenuItem(item);
+            return;
         }
+        for (const n of achadas)
+            this._secao.addMenuItem(this._itemNota(n));
+    }
+
+    _itemNota(n) {
+        const item = new PopupMenu.PopupBaseMenuItem();
+        item.add_child(new St.Widget({style_class: `recados-ponto recados-${n.cor}`, y_align: Clutter.ActorAlign.CENTER}));
+        const textos = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const marca = {lixeira: '🗑 Lixeira (clique restaura): ', concluida: '✓ ', cancelada: '✗ ', arquivada: '▣ '}[n.estado] ?? '';
+        textos.add_child(new St.Label({text: `${marca}${n.titulo}`}));
+        if (n.trecho)
+            textos.add_child(new St.Label({text: n.trecho, style_class: 'recados-trecho'}));
+        item.add_child(textos);
+        if (n.total) {
+            const feito = n.pendentes === 0;
+            item.add_child(new St.Label({
+                text: feito ? `✓ ${n.total}` : `${n.total - n.pendentes}/${n.total}`,
+                style_class: feito ? 'recados-feito' : 'recados-pendente',
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+        }
+        const opcao = {ativa: '--abrir', lixeira: '--restaurar'}[n.estado] ?? '--reabrir';
+        const args = [opcao, String(n.id)];
+        item.connect('activate', () => rodar(args));
+        return item;
     }
 
     _desenhar() {

@@ -16,6 +16,7 @@ from recados import fixadas  # noqa: E402
 from recados.datas import fixar_datas  # noqa: E402
 from recados.markdown import alternar_item, blocos, contar_tarefas, para_pango, realces  # noqa: E402
 from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
+from recados import projetos  # noqa: E402
 from recados.projetos import mover_concluido  # noqa: E402
 
 _CAIXAS = re.compile(r"^([ \t]*[-*+] )\[([ xX])\]", re.M)
@@ -91,6 +92,7 @@ class JanelaNota(Gtk.Window):
 
         caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         caixa.append(self._barra())
+        self.mostrar_projeto()
         caixa.append(self.rolagem)
         caixa.append(self.leitura)
         caixa.append(self.aviso_concluir)
@@ -124,6 +126,10 @@ class JanelaNota(Gtk.Window):
         self.contador = Gtk.Label(visible=False, tooltip_text="Tarefas feitas / total")
         self.contador.add_css_class("contador")
         barra.append(self.contador)
+        self.rotulo_projeto = Gtk.Label(visible=False, ellipsize=3, max_width_chars=18,
+                                        tooltip_text="Projeto (troque no menu ⋮)")
+        self.rotulo_projeto.add_css_class("projeto-rotulo")
+        barra.append(self.rotulo_projeto)
         barra.append(Gtk.Box(hexpand=True))
 
         ler = Gtk.Button(icon_name="view-reveal-symbolic", tooltip_text="Ler / editar (Ctrl+E)")
@@ -195,6 +201,43 @@ class JanelaNota(Gtk.Window):
             linha_tam.append(b)
         caixa.append(linha_tam)
 
+        titulo("Projeto")
+        escolha = Gtk.DropDown(model=Gtk.StringList())
+        nome_novo = Gtk.Entry(placeholder_text="Nome do projeto novo (Enter)", visible=False)
+        trocando = [False]
+
+        def recarregar(*_):
+            trocando[0] = True
+            sem = "Automático (DeepSeek)"
+            atual = self.nota.projeto or sem
+            opcoes = [*projetos.nomes(self.repo), projetos.INBOX, "Novo…"]
+            if atual not in opcoes:
+                opcoes.insert(0, atual)
+            escolha.set_sensitive(self.nota.id is not None)  # rascunho vazio ainda não tem onde guardar
+            escolha.set_tooltip_text(None if self.nota.id is not None else "Escreva algo primeiro")
+            escolha.set_model(Gtk.StringList.new(opcoes))
+            escolha.set_selected(opcoes.index(atual))
+            nome_novo.set_visible(False)
+            trocando[0] = False
+
+        def escolheu(*_):
+            if trocando[0] or (item := escolha.get_selected_item()) is None:
+                return
+            if item.get_string() == "Automático (DeepSeek)":
+                return
+            if item.get_string() == "Novo…":
+                nome_novo.set_visible(True)
+                nome_novo.grab_focus()
+                return
+            pop.popdown()
+            self.definir_projeto(item.get_string())
+
+        escolha.connect("notify::selected", escolheu)
+        nome_novo.connect("activate", lambda e: e.get_text().strip() and (pop.popdown(), self.definir_projeto(e.get_text())))
+        pop.connect("show", recarregar)
+        caixa.append(escolha)
+        caixa.append(nome_novo)
+
         caixa.append(Gtk.Separator())
         estados = Gtk.Box(spacing=4, homogeneous=True)
         for estado, rotulo in (("concluida", "Concluir"), ("cancelada", "Cancelar"), ("arquivada", "Arquivar")):
@@ -252,6 +295,29 @@ class JanelaNota(Gtk.Window):
                     fixadas.gravar(self.repo)
         elif texto != self.nota.texto:
             self.nota = self.repo.atualizar(self.nota.id, texto=texto)
+        self.mostrar_projeto()
+
+    # --- projeto ---
+    def mostrar_projeto(self) -> None:
+        p = self.nota.projeto
+        self.rotulo_projeto.set_visible(bool(p))
+        self.rotulo_projeto.set_label(p or "")
+
+    def recarregar_projeto(self) -> None:
+        """O classificador gravou o projeto por outra conexão: relê só isso, sem tocar no texto."""
+        if self.nota.id is not None and (n := self.repo.obter(self.nota.id)) is not None:
+            self.nota = replace(self.nota, projeto=n.projeto, projeto_de=n.projeto_de,
+                                projeto_manual=n.projeto_manual)
+            self.mostrar_projeto()
+
+    def definir_projeto(self, nome: str) -> None:
+        """Escolha da pessoa: vale para sempre (o classificador não mexe mais)."""
+        if self.nota.id is None:
+            self.salvar_agora()
+        if self.nota.id is None or not nome.strip():
+            return
+        self.repo.definir_projeto(self.nota.id, projetos.canonico(self.repo, nome), manual=True)
+        self.recarregar_projeto()
 
     @staticmethod
     def _titulo(nota: Nota) -> str:

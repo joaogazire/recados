@@ -1,6 +1,7 @@
 """Modelo e armazenamento das notas (SQLite local)."""
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -12,7 +13,8 @@ ESTADOS = ("ativa", "concluida", "cancelada", "arquivada")
 TAMANHOS = {"P": (200, 160), "M": (260, 220), "G": (360, 320), "GG": (480, 440)}
 
 _EDITAVEIS = {"texto", "cor", "x", "y", "largura", "altura", "recolhida", "sempre_no_topo", "fonte"}
-_BOOLEANOS = {"recolhida", "sempre_no_topo"}
+_BOOLEANOS = {"recolhida", "sempre_no_topo", "projeto_manual"}
+MAX_PROJETO = 60
 
 _ESQUEMA = """
 CREATE TABLE IF NOT EXISTS notas (
@@ -50,6 +52,9 @@ class Nota:
     resumo_de: str | None = None  # hash do texto que gerou o resumo
     estado: str = "ativa"
     estado_em: float | None = None
+    projeto: str | None = None  # None = ainda não classificada
+    projeto_de: str | None = None  # hash do texto que o classificador viu
+    projeto_manual: bool = False  # escolhido pela pessoa: o classificador não mexe
 
 
 def rascunho(cor: str = "amarelo", fonte: str = "sans", largura: int = 260, altura: int = 220) -> Nota:
@@ -73,11 +78,19 @@ class Repositorio:
         self._db.executescript(_ESQUEMA)
         colunas = {c[1] for c in self._db.execute("PRAGMA table_info(notas)")}
         novas = {"fonte": "TEXT NOT NULL DEFAULT 'sans'", "resumo": "TEXT", "resumo_de": "TEXT",
-                 "estado": "TEXT NOT NULL DEFAULT 'ativa'", "estado_em": "REAL"}
+                 "estado": "TEXT NOT NULL DEFAULT 'ativa'", "estado_em": "REAL",
+                 "projeto": "TEXT", "projeto_de": "TEXT", "projeto_manual": "INTEGER NOT NULL DEFAULT 0"}
         with self._db:
             for nome, tipo in novas.items():  # nomes e tipos fixos, nada vem de fora
                 if nome not in colunas:
                     self._db.execute(f"ALTER TABLE notas ADD COLUMN {nome} {tipo}")
+            if "projeto" not in colunas:  # banco de antes dos projetos: '# Nome' + '## Fazer' já era projeto
+                for id_, texto in self._db.execute("SELECT id, texto FROM notas").fetchall():
+                    primeira = texto.split("\n", 1)[0]
+                    if primeira.startswith("# ") and re.search(r"^## Fazer\b", texto, re.M):
+                        nome = " ".join(primeira[2:].split())[:MAX_PROJETO]
+                        if nome:
+                            self._db.execute("UPDATE notas SET projeto = ? WHERE id = ?", (nome, id_))
 
     def fechar(self) -> None:
         self._db.close()
@@ -155,6 +168,21 @@ class Repositorio:
                 "UPDATE notas SET resumo = ?, resumo_de = ? WHERE id = ? AND apagada IS NULL",
                 (resumo, resumo_de, id_),
             )
+
+    def definir_projeto(self, id_: int, projeto: str, de: str | None = None, manual: bool = False,
+                        automatico: bool = False) -> None:
+        """Projeto da nota, sem mexer em 'editada' (classificar não é edição).
+
+        automatico=True (o classificador): não grava se a pessoa escolheu o projeto na mão nesse meio-tempo.
+        """
+        projeto = " ".join(projeto.split())[:MAX_PROJETO]
+        if not projeto:
+            raise ValueError("projeto vazio")
+        sql = "UPDATE notas SET projeto = ?, projeto_de = ?, projeto_manual = ? WHERE id = ? AND apagada IS NULL"
+        if automatico:
+            sql += " AND projeto_manual = 0"
+        with self._db:
+            self._db.execute(sql, (projeto, de, int(manual), id_))
 
     def apagar(self, id_: int) -> None:
         with self._db:

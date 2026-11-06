@@ -283,7 +283,12 @@ class App(Adw.Application):
     def mostrar_captura(self, itens: list[str] | None = None, contexto: str = "", projeto: str | None = None,
                         ao_cancelar=None):
         nomes = projetos.nomes(self.repo)
-        JanelaCaptura(nomes, self.capturar, lambda t: projetos.sugerir_projeto(t, nomes), self,
+        desc = projetos.descricoes(self.repo)
+
+        def sugerir(texto):
+            return projetos.sugerir_projeto(texto, nomes, lambda t, ns: projetos.pedir_deepseek(t, ns, desc))
+
+        JanelaCaptura(nomes, self.capturar, sugerir, self,
                       itens=itens, contexto=contexto, projeto=projeto, ao_cancelar=ao_cancelar).present()
 
     def capturar(self, nome: str, novo: bool, itens: list[str]):
@@ -349,12 +354,12 @@ class App(Adw.Application):
             acao.set_enabled(ligada)
 
     def nova_nota(self):
-        """Ctrl+N: item novo num projeto. Aberta de dentro de um projeto, já vem nele."""
-        atual = self.get_active_window()
-        projeto = None
-        if isinstance(atual, JanelaNota) and atual.nota.id is not None:
-            projeto = projetos.titulo(atual.texto()) or None
-        self.mostrar_captura(projeto=projeto)
+        p = preferencias.carregar()
+        largura, altura = TAMANHOS[p["tamanho"]]
+        nota = rascunho(fonte=p["fonte"], largura=largura, altura=altura)
+        j = self._janela(nota)
+        j.present()
+        j.editor.grab_focus()
 
     def _avisar(self, nota, lembrete):
         n = Gio.Notification.new(f"⏰ {lembrete.titulo}")
@@ -399,8 +404,10 @@ class App(Adw.Application):
                 try:
                     repo = Repositorio(caminho_banco())
                     resumir.atualizar(repo)
+                    if projetos.classificar(repo):  # DeepSeek põe as notas novas no projeto
+                        GLib.idle_add(self._atualizar_rotulos)
                 except Exception as e:  # banco ocupado etc.: tenta de novo daqui a 60 s
-                    print(f"recados: resumo falhou: {e}", file=sys.stderr)
+                    print(f"recados: resumo/classificação falhou: {e}", file=sys.stderr)
                 finally:
                     if repo is not None:
                         repo.fechar()
@@ -408,6 +415,11 @@ class App(Adw.Application):
 
             threading.Thread(target=trabalho, daemon=True).start()
         return GLib.SOURCE_CONTINUE
+
+    def _atualizar_rotulos(self):
+        for j in self._notas_abertas().values():
+            j.recarregar_projeto()
+        return GLib.SOURCE_REMOVE
 
     def _janela(self, nota):
         return JanelaNota(self.repo, nota, self, ler=preferencias.carregar()["abrir_em"] == "leitura")
