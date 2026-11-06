@@ -373,3 +373,113 @@ def test_voz_sem_whisper_nao_trava(repo, monkeypatch, tmp_path):
             break
         time.sleep(0.02)
     assert fins == [None]
+
+
+def test_nova_nota_nao_abre_as_outras_notas(repo, monkeypatch):
+    from recados import app as modapp
+    repo.criar("antiga 1")
+    repo.criar("antiga 2")
+    a = modapp.App()
+    a.repo = repo
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {})
+    recebidas = []
+    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: (recebidas.append(nota), type("J", (), {
+        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())[1])
+    a.nova_nota()
+    assert len(recebidas) == 1 and recebidas[0].id is None
+
+
+def test_tema_segue_o_sistema(monkeypatch, tmp_path):
+    from gi.repository import Adw
+    from recados import app as modapp
+    monkeypatch.setattr(modapp.Adw.Application, "do_startup", lambda self: None)
+    # nunca o banco/preferências reais: do_startup purga a lixeira, grava fixadas, chama DeepSeek e agenda
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setenv("RECADOS_PREFERENCIAS", str(tmp_path / "p.json"))
+    for metodo in ("_resumir", "_checar_lembretes"):
+        monkeypatch.setattr(modapp.App, metodo, lambda self: True)
+    monkeypatch.setattr(modapp.GLib, "timeout_add_seconds", lambda *a: 0)
+    modapp.App().do_startup()
+    assert (tmp_path / "recados" / "recados.db").exists()
+    assert Adw.StyleManager.get_default().get_color_scheme() == Adw.ColorScheme.DEFAULT
+
+
+def test_nota_do_dia_desligada_nao_abre_nada(repo, tmp_path, monkeypatch):
+    from recados import app as modapp
+    from recados.preferencias import PADRAO, salvar
+    pref = tmp_path / "p.json"
+    salvar(pref, {**PADRAO, "nota_do_dia": False})
+    monkeypatch.setenv("RECADOS_PREFERENCIAS", str(pref))
+    a = modapp.App()
+    a.repo = repo
+    a._rascunho_dia = None
+    abertas = []
+    monkeypatch.setattr(a, "_janela", lambda n: abertas.append(n))
+    monkeypatch.setattr(a, "abrir_nota", lambda i: abertas.append(i))
+    a.nota_do_dia()
+    assert abertas == []
+
+
+def test_contador_de_tarefas_na_barra(repo):
+    j = JanelaNota(repo, repo.criar("- [ ] a\n- [x] b"))
+    assert j.contador.get_visible() and j.contador.get_label() == "1/2"
+    j.buffer.set_text("sem tarefas")
+    assert not j.contador.get_visible()
+
+
+def test_nota_do_dia_traz_pendencias_e_conclui_a_anterior(repo, monkeypatch, tmp_path):
+    from datetime import date, timedelta
+    from recados.app import App
+    from recados.dia import titulo_do_dia
+    monkeypatch.setenv("RECADOS_PREFERENCIAS", str(tmp_path / "p.json"))
+    ontem = repo.criar(titulo_do_dia(date.today() - timedelta(days=1)) + "\n- [ ] pendente\n- [x] feito")
+    a = App()
+    a.repo = repo
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {})
+    a.nota_do_dia()
+    j = a._rascunho_dia
+    assert "- [ ] pendente" in j.texto() and "feito" not in j.texto()
+    j.salvar_agora()  # só o modelo: não salva nem mexe na de ontem
+    assert repo.obter(ontem.id).estado == "ativa"
+    j.buffer.set_text(j.texto() + "nova")
+    j.salvar_agora()
+    assert repo.obter(ontem.id).estado == "concluida"
+
+
+def _botoes(widget):
+    filho, achados = widget.get_first_child(), []
+    while filho:
+        if isinstance(filho, Gtk.Button | Gtk.MenuButton):
+            achados.append(filho)
+        filho = filho.get_next_sibling()
+    return achados
+
+
+def test_barra_enxuta_com_um_menu_de_opcoes(repo):
+    j = JanelaNota(repo, repo.criar("x"))
+    assert len(_botoes(j.barra)) <= 5
+    assert isinstance(j.menu_opcoes, Gtk.MenuButton)
+
+
+def test_menu_opcoes_agrupa_tudo_e_apagar_funciona(repo):
+    j = JanelaNota(repo, repo.criar("x"))
+    rotulos = set()
+
+    def varrer(w):
+        if isinstance(w, Gtk.Label):
+            rotulos.add(w.get_label())
+        if isinstance(w, Gtk.Button) and w.get_label():
+            rotulos.add(w.get_label())
+        f = w.get_first_child()
+        while f:
+            varrer(f)
+            f = f.get_next_sibling()
+
+    varrer(j.menu_opcoes.get_popover())
+    assert {"Cor", "Fonte", "Tamanho", "Concluir", "Cancelar", "Arquivar", "Apagar", "Preferências"} <= rotulos
+
+
+def test_estilo_do_popover_nao_herda_cor_escura_da_barra():
+    from pathlib import Path
+    css = (Path(__file__).parent.parent / "recados" / "estilo.css").read_text()
+    assert ".barra popover" in css and "popover_fg_color" in css

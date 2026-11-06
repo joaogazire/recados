@@ -12,11 +12,13 @@ const notas = lerResumo(JSON.stringify([
     {id: 2, titulo: 'b', estado: 'concluida', pendentes: 1, total: 1},
     {id: 3, titulo: 'c', estado: 'hackeada'},
     {id: 4, titulo: 'd'},
+    {id: 5, titulo: 'e', estado: 'lixeira'},
 ]));
-igual(notas.map(n => n.estado), ['ativa', 'concluida', 'ativa', 'ativa'], 'estado validado, padrão ativa');
+igual(notas.map(n => n.estado), ['ativa', 'concluida', 'ativa', 'ativa', 'lixeira'], 'estado validado, padrão ativa');
 const g = separarPorEstado(notas);
 igual(g.ativa.map(n => n.id), [1, 3, 4], 'ativas');
 igual(g.concluida.map(n => n.id), [2], 'concluídas');
 igual(g.cancelada, [], 'canceladas vazia');
 igual(g.arquivada, [], 'arquivadas vazia');
+igual(g.lixeira.map(n => n.id), [5], 'lixeira');
 System.exit(falhas ? 1 : 0);

@@ -105,3 +105,12 @@ def para_pango(linha: str) -> str:
         pos = m.end()
     saida.append(escape(linha[pos:], quote=False))
     return "".join(saida)
+
+
+_TAREFA = re.compile(r"^[ \t]*[-*+] \[([ xX])\]", re.M)
+
+
+def contar_tarefas(texto: str) -> tuple[int, int]:
+    """(feitas, total) das caixas '- [ ]' / '- [x]' do texto."""
+    marcas = _TAREFA.findall(texto)
+    return sum(m != " " for m in marcas), len(marcas)

@@ -173,7 +173,15 @@ class Repositorio:
         if cur.rowcount == 0:
             raise KeyError(id_)
 
-    def purgar_apagadas(self) -> int:
+    def listar_apagadas(self) -> list[Nota]:
+        """A lixeira: notas apagadas que ainda podem ser restauradas."""
+        linhas = self._db.execute(
+            "SELECT * FROM notas WHERE apagada IS NOT NULL ORDER BY criada, id").fetchall()
+        return [self._nota(l) for l in linhas]
+
+    def purgar_apagadas(self, dias: float = 30) -> int:
+        """Apaga de vez o que está na lixeira há mais de 'dias'."""
+        limite = time.time() - dias * 86400
         with self._db:
-            cur = self._db.execute("DELETE FROM notas WHERE apagada IS NOT NULL")
+            cur = self._db.execute("DELETE FROM notas WHERE apagada IS NOT NULL AND apagada <= ?", (limite,))
         return cur.rowcount

@@ -79,7 +79,7 @@ def test_apagar_some_da_lista_e_restaurar_volta(repo):
 def test_purgar_remove_apagadas_de_vez(repo):
     n = repo.criar("x")
     repo.apagar(n.id)
-    assert repo.purgar_apagadas() == 1
+    assert repo.purgar_apagadas(dias=0) == 1
     with pytest.raises(KeyError):
         repo.restaurar(n.id)
 

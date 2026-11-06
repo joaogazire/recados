@@ -35,13 +35,13 @@ def resumo_local(texto: str) -> str:
 def resumo(repo: Repositorio) -> list[dict]:
     saida = []
     agora = datetime.now()
-    for n in repo.listar(estado=None):
+    for n, lixo in [(n, False) for n in repo.listar(estado=None)] + [(n, True) for n in repo.listar_apagadas()]:
         marcas = _ITEM.findall(n.texto)
         atual = n.resumo and n.resumo_de == assinatura(n.texto)  # resumo de um texto antigo não vale
         titulo = n.resumo if atual else resumo_local(n.texto)
         saida.append({"id": n.id, "titulo": titulo, "cor": n.cor,
                       "pendentes": marcas.count(" "), "total": len(marcas), "texto": n.texto[:2000],
-                      "estado": n.estado,
+                      "estado": "lixeira" if lixo else n.estado,
                       "lembretes": [{"quando": l.quando.isoformat(), "titulo": l.titulo, "feito": l.feito}
                                     for l in extrair(n.texto, agora)][:20]})
     return saida

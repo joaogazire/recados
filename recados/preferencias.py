@@ -7,12 +7,13 @@ from pathlib import Path
 
 from recados.notas import FONTES, TAMANHOS
 
-PADRAO = {"fonte": "sans", "tamanho": "M", "abrir_em": "leitura", "abrir_na_sessao": True}
+PADRAO = {"fonte": "sans", "tamanho": "M", "abrir_em": "leitura", "abrir_na_sessao": True, "nota_do_dia": True}
 _VALIDOS = {
     "fonte": lambda v: v in FONTES,
     "tamanho": lambda v: v in TAMANHOS,
     "abrir_em": lambda v: v in ("leitura", "edicao"),
     "abrir_na_sessao": lambda v: isinstance(v, bool),
+    "nota_do_dia": lambda v: isinstance(v, bool),
 }
 
 

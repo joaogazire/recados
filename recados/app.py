@@ -21,8 +21,9 @@ from recados.captura import achar_inbox, acrescentar_item, capturar  # noqa: E40
 from recados.captura_janela import JanelaCaptura  # noqa: E402
 from recados.gravacao_janela import JanelaGravacao  # noqa: E402
 from recados.ao_vivo import ler_evento  # noqa: E402
-from recados.dia import nota_de_hoje, titulo_do_dia  # noqa: E402
+from recados.dia import nota_anterior, nota_de_hoje, pendencias, titulo_do_dia  # noqa: E402
 from recados.resumo import resumo  # noqa: E402
+from recados.datas import fixar_datas  # noqa: E402
 from recados import gagenda, resumir, voz  # noqa: E402
 from recados.lembretes import Avisador  # noqa: E402
 
@@ -49,6 +50,7 @@ class App(Adw.Application):
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
         self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
         self.add_main_option("capturar", ord("c"), 0, 0, "Captura rápida: uma linha para a Inbox", None)
+        self.add_main_option("restaurar", 0, 0, GLib.OptionArg.INT, "Tirar nota da lixeira", "ID")
         self.add_main_option("reabrir", 0, 0, GLib.OptionArg.INT, "Reabrir nota concluída/cancelada/arquivada", "ID")
         self.add_main_option("voz", ord("v"), 0, 0, "Gravar uma ideia falada (de novo para parar)", None)
         self.add_main_option("hoje", ord("d"), 0, 0, "Abrir (ou criar) a nota do dia", None)
@@ -67,14 +69,14 @@ class App(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
-        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.DEFAULT)
         css = Gtk.CssProvider()
         css.load_from_path(str(Path(__file__).with_name("estilo.css")))
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
         self.repo = Repositorio(caminho_banco())
-        self.repo.purgar_apagadas()  # o desfazer só vale enquanto o app está aberto
+        self.repo.purgar_apagadas(dias=30)  # a lixeira guarda as apagadas por 30 dias
         fixadas.gravar(self.repo)
         voz.limpar_flag(caminho_banco().parent / "voz")  # sobra de um app que fechou gravando
         self._resumindo = False
@@ -95,7 +97,7 @@ class App(Adw.Application):
         acao = Gio.SimpleAction.new("hoje", None)
         acao.connect("activate", lambda *_: self.nota_do_dia())
         self.add_action(acao)
-        self.set_accels_for_action("app.hoje", ["<Control>d"])
+        self._aplicar_nota_do_dia(preferencias.carregar()["nota_do_dia"])
         acao = Gio.SimpleAction.new("preferencias", None)
         acao.connect("activate", lambda *_: self.mostrar_preferencias())
         self.add_action(acao)
@@ -116,6 +118,9 @@ class App(Adw.Application):
                 self.activate()
         elif opcoes.get("nova"):
             self.nova_nota()
+        elif "restaurar" in opcoes:
+            if not self.restaurar_nota(opcoes["restaurar"]):
+                self.activate()
         elif "reabrir" in opcoes:
             if not self.reabrir_nota(opcoes["reabrir"]):
                 self.activate()
@@ -148,6 +153,15 @@ class App(Adw.Application):
             return False
         self._janela(nota).present()
         return True
+
+    def restaurar_nota(self, id_: int) -> bool:
+        """Tira a nota da lixeira e mostra."""
+        try:
+            self.repo.restaurar(id_)
+        except KeyError:
+            return False
+        fixadas.gravar(self.repo)
+        return self.abrir_nota(id_)
 
     def reabrir_nota(self, id_: int) -> bool:
         """Volta a nota para ativa e mostra."""
@@ -259,7 +273,7 @@ class App(Adw.Application):
         return GLib.SOURCE_REMOVE
 
     def _nota_de_voz(self, texto: str):
-        nota = self.repo.criar(texto, "verde")
+        nota = self.repo.criar(fixar_datas(texto, datetime.now()), "verde")
         self.abrir_nota(nota.id)
 
     def mostrar_captura(self):
@@ -280,6 +294,8 @@ class App(Adw.Application):
 
     def nota_do_dia(self):
         """Traz a nota de hoje; se não existe, abre um rascunho com o título da data."""
+        if not preferencias.carregar()["nota_do_dia"]:
+            return
         if (n := nota_de_hoje(self.repo)) is not None:
             self.abrir_nota(n.id)
             return
@@ -291,16 +307,32 @@ class App(Adw.Application):
         j = self._janela(rascunho(fonte=p["fonte"], largura=largura, altura=altura))
         self._rascunho_dia = j
         j.connect("destroy", lambda *_: setattr(self, "_rascunho_dia", None))
-        j.modelo = titulo_do_dia(date.today()) + "\n- [ ] "
+        anterior = nota_anterior(self.repo)
+        herdadas = pendencias(anterior.texto) if anterior else []
+        j.modelo = "\n".join([titulo_do_dia(date.today()), *herdadas, "- [ ] "])
+        if anterior is not None:
+            j.ao_criar = lambda: self._concluir_dia(anterior.id)
         j.buffer.set_text(j.modelo)
         j.buffer.place_cursor(j.buffer.get_end_iter())
         j.present()
         j.editor.grab_focus()
 
+    def _concluir_dia(self, id_: int):
+        """A nota de hoje herdou as pendências: a do dia anterior sai da tela como concluída."""
+        if (j := self._notas_abertas().get(id_)):
+            j.definir_estado("concluida")
+            return
+        try:
+            self.repo.mudar_estado(id_, "concluida")
+        except KeyError:
+            pass
+
+    def _aplicar_nota_do_dia(self, ligada: bool):
+        self.set_accels_for_action("app.hoje", ["<Control>d"] if ligada else [])
+        if (acao := self.lookup_action("hoje")) is not None:
+            acao.set_enabled(ligada)
+
     def nova_nota(self):
-        if not self._notas_abertas():
-            for n in self.repo.listar():
-                self._janela(n).present()
         p = preferencias.carregar()
         largura, altura = TAMANHOS[p["tamanho"]]
         nota = rascunho(fonte=p["fonte"], largura=largura, altura=altura)
@@ -380,6 +412,8 @@ class App(Adw.Application):
                         ["%s — %d × %d" % (t, *TAMANHOS[t]) for t in tamanhos], tamanhos.index(p["tamanho"]))
         modo = combo("Notas abrem em", [r for _, r in modos], [m for m, _ in modos].index(p["abrir_em"]))
         sessao = Adw.SwitchRow(title="Mostrar as notas ao iniciar a sessão", active=p["abrir_na_sessao"])
+        do_dia = Adw.SwitchRow(title="Nota do dia", subtitle="Ctrl+D abre a nota de hoje",
+                               active=p["nota_do_dia"])
 
         def gravar(*_):
             preferencias.salvar(None, {
@@ -387,14 +421,17 @@ class App(Adw.Application):
                 "tamanho": tamanhos[tamanho.get_selected()],
                 "abrir_em": modos[modo.get_selected()][0],
                 "abrir_na_sessao": sessao.get_active(),
+                "nota_do_dia": do_dia.get_active(),
             })
+            self._aplicar_nota_do_dia(do_dia.get_active())
 
         for linha in (fonte, tamanho, modo):
             linha.connect("notify::selected", gravar)
         sessao.connect("notify::active", gravar)
+        do_dia.connect("notify::active", gravar)
 
         grupo_novas = Adw.PreferencesGroup(title="Notas")
-        for linha in (fonte, tamanho, modo):
+        for linha in (fonte, tamanho, modo, do_dia):
             grupo_novas.add(linha)
         grupo_sessao = Adw.PreferencesGroup(title="Sessão")
         grupo_sessao.add(sessao)

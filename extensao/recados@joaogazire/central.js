@@ -1,5 +1,5 @@
 // Lógica pura (sem GNOME Shell) da central de notas no painel.
-const ESTADOS = ['ativa', 'concluida', 'cancelada', 'arquivada'];
+const ESTADOS = ['ativa', 'concluida', 'cancelada', 'arquivada', 'lixeira'];
 const CORES = ['amarelo', 'azul', 'verde', 'rosa', 'roxo', 'cinza'];
 const MAX_TITULO = 60;
 const MAX_NOTAS = 200;

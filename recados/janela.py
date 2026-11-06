@@ -14,7 +14,7 @@ from gi.repository import GLib, Gtk, GtkSource, Pango  # noqa: E402
 
 from recados import fixadas  # noqa: E402
 from recados.datas import fixar_datas  # noqa: E402
-from recados.markdown import alternar_item, blocos, para_pango, realces  # noqa: E402
+from recados.markdown import alternar_item, blocos, contar_tarefas, para_pango, realces  # noqa: E402
 from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
 
 _CAIXAS = re.compile(r"^([ \t]*[-*+] )\[([ xX])\]", re.M)
@@ -47,6 +47,7 @@ class JanelaNota(Gtk.Window):
         self._apagar_id = 0
         self.em_leitura = False
         self.apagando = False
+        self.ao_criar = None  # chamado quando um rascunho vira nota de verdade
         self.modelo = ""  # texto pronto de um rascunho (nota do dia): sozinho não conta como digitado
         self.add_css_class("recado")
         self.set_default_size(nota.largura, nota.altura)
@@ -112,48 +113,17 @@ class JanelaNota(Gtk.Window):
 
     # --- barra de título ---
     def _barra(self) -> Gtk.Widget:
-        barra = Gtk.Box(spacing=2)
+        """Barra enxuta: nova, contador, ler, alfinete, menu ⋮ (tudo o mais) e fechar."""
+        barra = self.barra = Gtk.Box(spacing=2)
         barra.add_css_class("barra")
         nova = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Nova nota (Ctrl+N)")
         nova.add_css_class("flat")
         nova.connect("clicked", lambda *_: self.activate_action("app.nova", None))
         barra.append(nova)
+        self.contador = Gtk.Label(visible=False, tooltip_text="Tarefas feitas / total")
+        self.contador.add_css_class("contador")
+        barra.append(self.contador)
         barra.append(Gtk.Box(hexpand=True))
-
-        cores = Gtk.Box(spacing=4, margin_start=6, margin_end=6, margin_top=6, margin_bottom=6)
-        for cor in CORES:
-            b = Gtk.Button(tooltip_text=cor)
-            b.add_css_class("bolinha")
-            b.add_css_class(f"cor-{cor}")
-            b.connect("clicked", lambda _b, c=cor: (self.definir_cor(c), pop.popdown()))
-            cores.append(b)
-        pop = Gtk.Popover(child=cores)
-        menu = Gtk.MenuButton(icon_name="color-select-symbolic", popover=pop, tooltip_text="Cor")
-        menu.add_css_class("flat")
-        barra.append(menu)
-
-        opcoes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_start=6,
-                         margin_end=6, margin_top=6, margin_bottom=6)
-        opcoes.append(Gtk.Label(label="Fonte", xalign=0))
-        linha_fonte = Gtk.Box(spacing=4)
-        for f in FONTES:
-            b = Gtk.Button(label=_NOMES_FONTE[f])
-            b.add_css_class(f"fonte-{f}")
-            b.connect("clicked", lambda _b, f=f: (self.definir_fonte(f), pop_op.popdown()))
-            linha_fonte.append(b)
-        opcoes.append(linha_fonte)
-        opcoes.append(Gtk.Label(label="Tamanho", xalign=0))
-        linha_tam = Gtk.Box(spacing=4)
-        for nome in TAMANHOS:
-            b = Gtk.Button(label=nome, tooltip_text="%d × %d" % TAMANHOS[nome])
-            b.connect("clicked", lambda _b, t=nome: (self.definir_tamanho(t), pop_op.popdown()))
-            linha_tam.append(b)
-        opcoes.append(linha_tam)
-        pop_op = Gtk.Popover(child=opcoes)
-        aa = Gtk.MenuButton(icon_name="preferences-desktop-font-symbolic", popover=pop_op,
-                            tooltip_text="Fonte e tamanho")
-        aa.add_css_class("flat")
-        barra.append(aa)
 
         ler = Gtk.Button(icon_name="view-reveal-symbolic", tooltip_text="Ler / editar (Ctrl+E)")
         ler.add_css_class("flat")
@@ -166,28 +136,10 @@ class JanelaNota(Gtk.Window):
         self._alfinete.connect("toggled", lambda b: b.get_active() != self.nota.sempre_no_topo and self.alternar_fixada())
         barra.append(self._alfinete)
 
-        prefs = Gtk.Button(icon_name="emblem-system-symbolic", tooltip_text="Preferências")
-        prefs.add_css_class("flat")
-        prefs.connect("clicked", lambda *_: self.activate_action("app.preferencias", None))
-        barra.append(prefs)
-
-        estados = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_start=4, margin_end=4,
-                          margin_top=4, margin_bottom=4)
-        for estado, rotulo in (("concluida", "Concluir"), ("cancelada", "Cancelar"), ("arquivada", "Arquivar")):
-            b = Gtk.Button(label=rotulo)
-            b.add_css_class("flat")
-            b.connect("clicked", lambda _b, e=estado: (pop_estado.popdown(), self.definir_estado(e)))
-            estados.append(b)
-        pop_estado = Gtk.Popover(child=estados)
-        mais = Gtk.MenuButton(icon_name="view-more-symbolic", popover=pop_estado,
-                              tooltip_text="Concluir, cancelar ou arquivar")
-        mais.add_css_class("flat")
-        barra.append(mais)
-
-        lixo = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Apagar nota")
-        lixo.add_css_class("flat")
-        lixo.connect("clicked", lambda *_: self.apagar())
-        barra.append(lixo)
+        self.menu_opcoes = Gtk.MenuButton(icon_name="view-more-symbolic", tooltip_text="Mais opções",
+                                          popover=self._popover_opcoes())
+        self.menu_opcoes.add_css_class("flat")
+        barra.append(self.menu_opcoes)
 
         fechar = Gtk.Button(icon_name="window-close-symbolic", tooltip_text="Fechar")
         fechar.add_css_class("flat")
@@ -199,6 +151,69 @@ class JanelaNota(Gtk.Window):
         alca = Gtk.WindowHandle(child=barra)
         alca.add_controller(clique)
         return alca
+
+    def _popover_opcoes(self) -> Gtk.Popover:
+        """Menu ⋮: Aparência (cor, fonte, tamanho) · Estado · Preferências e Apagar."""
+        pop = Gtk.Popover()
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_start=10,
+                        margin_end=10, margin_top=10, margin_bottom=10)
+
+        def titulo(texto):
+            r = Gtk.Label(label=texto, xalign=0)
+            r.add_css_class("dim-label")
+            r.add_css_class("caption-heading")
+            caixa.append(r)
+
+        def fecha(f):
+            return lambda *_: (pop.popdown(), f())
+
+        titulo("Cor")
+        cores = Gtk.Box(spacing=6)
+        for cor in CORES:
+            b = Gtk.Button(tooltip_text=cor)
+            b.add_css_class("bolinha")
+            b.add_css_class(f"cor-{cor}")
+            b.connect("clicked", fecha(lambda c=cor: self.definir_cor(c)))
+            cores.append(b)
+        caixa.append(cores)
+
+        titulo("Fonte")
+        linha_fonte = Gtk.Box(spacing=4, homogeneous=True)
+        for f in FONTES:
+            b = Gtk.Button(label=_NOMES_FONTE[f])
+            b.add_css_class(f"fonte-{f}")
+            b.connect("clicked", fecha(lambda f=f: self.definir_fonte(f)))
+            linha_fonte.append(b)
+        caixa.append(linha_fonte)
+
+        titulo("Tamanho")
+        linha_tam = Gtk.Box(spacing=4, homogeneous=True)
+        for nome in TAMANHOS:
+            b = Gtk.Button(label=nome, tooltip_text="%d × %d" % TAMANHOS[nome])
+            b.connect("clicked", fecha(lambda t=nome: self.definir_tamanho(t)))
+            linha_tam.append(b)
+        caixa.append(linha_tam)
+
+        caixa.append(Gtk.Separator())
+        estados = Gtk.Box(spacing=4, homogeneous=True)
+        for estado, rotulo in (("concluida", "Concluir"), ("cancelada", "Cancelar"), ("arquivada", "Arquivar")):
+            b = Gtk.Button(label=rotulo)
+            b.connect("clicked", fecha(lambda e=estado: self.definir_estado(e)))
+            estados.append(b)
+        caixa.append(estados)
+
+        caixa.append(Gtk.Separator())
+        for rotulo, acao in (("Preferências", lambda: self.activate_action("app.preferencias", None)),
+                             ("Apagar", self.apagar)):
+            b = Gtk.Button(label=rotulo, halign=Gtk.Align.FILL)
+            b.add_css_class("flat")
+            if rotulo == "Apagar":
+                b.add_css_class("destructive-action")
+            b.get_child().set_halign(Gtk.Align.START) if b.get_child() else None
+            b.connect("clicked", fecha(acao))
+            caixa.append(b)
+        pop.set_child(caixa)
+        return pop
 
     def _ao_clicar_barra(self, gesto, n, _x, _y):
         if n == 2:
@@ -230,6 +245,8 @@ class JanelaNota(Gtk.Window):
                                                 altura=n.altura, recolhida=n.recolhida,
                                                 sempre_no_topo=n.sempre_no_topo)
                 self.set_title(self._titulo(self.nota))
+                if self.ao_criar is not None:
+                    self.ao_criar()
                 if self.nota.sempre_no_topo:
                     fixadas.gravar(self.repo)
         elif texto != self.nota.texto:
@@ -257,6 +274,9 @@ class JanelaNota(Gtk.Window):
         self.destroy()
 
     def _checar_tudo_feito(self) -> None:
+        feitas, total = contar_tarefas(self.texto())
+        self.contador.set_visible(total > 0)
+        self.contador.set_label(f"{feitas}/{total}")
         marcas = [m for _p, m in _CAIXAS.findall(self.texto())]
         self.aviso_concluir.set_visible(bool(marcas) and " " not in marcas and not self.apagando)
 

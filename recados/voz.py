@@ -16,7 +16,10 @@ MAX_LINHAS = 15
 _PROMPT = (
     "Você recebe a transcrição de uma ideia falada em português. Escreva uma nota curta em Markdown: "
     "a primeira linha é '# ' + um título de até 6 palavras; depois de 1 a 5 tópicos com '- ', "
-    "usando '- [ ] ' quando for uma tarefa a fazer. Use só o que foi dito, sem inventar nada. "
+    "usando '- [ ] ' quando for uma tarefa a fazer. Se a fala disser quando fazer uma tarefa, termine a "
+    "linha dela com o dia ('@hoje', '@amanhã', '@seg' a '@dom' ou '@DD/MM') e, se houver hora, a hora "
+    "no formato '10h' ou '14h30', por exemplo '- [ ] comprar pão @amanhã 10h'. "
+    "Use só o que foi dito, sem inventar nada. "
     "Responda só com o Markdown."
 )
 

@@ -15,6 +15,7 @@ const LANCADOR = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 're
 const ATUALIZAR_S = 60;
 const HISTORICO = GLib.build_filenamev([GLib.get_user_data_dir(), 'recados', 'pendentes-por-dia.json']);
 const TAM = 18;
+const PREFERENCIAS = GLib.build_filenamev([GLib.get_user_config_dir(), 'recados', 'preferencias.json']);
 const GRAVANDO = GLib.build_filenamev([GLib.get_user_data_dir(), 'recados', 'voz', 'gravando']);
 
 function lerArquivo(caminho) {
@@ -157,7 +158,7 @@ class Central extends PanelMenu.Button {
         this._secao = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._secao);
         this._outros = {};
-        for (const [estado, rotulo] of [['concluida', 'Concluídas'], ['cancelada', 'Canceladas'], ['arquivada', 'Arquivadas']]) {
+        for (const [estado, rotulo] of [['concluida', 'Concluídas'], ['cancelada', 'Canceladas'], ['arquivada', 'Arquivadas'], ['lixeira', 'Lixeira']]) {
             const sub = new PopupMenu.PopupSubMenuMenuItem(rotulo);
             this._outros[estado] = {sub, rotulo};
             this.menu.addMenuItem(sub);
@@ -169,6 +170,16 @@ class Central extends PanelMenu.Button {
         const doDia = new PopupMenu.PopupMenuItem('Nota do dia');
         doDia.connect('activate', () => rodar(['--hoje']));
         this.menu.addMenuItem(doDia);
+        // Esconde "Nota do dia" quando a opção está desligada nas preferências.
+        this.menu.connect('open-state-changed', (_m, aberto) => {
+            if (!aberto)
+                return;
+            let ligada = true;
+            try {
+                ligada = JSON.parse(lerArquivo(PREFERENCIAS) || '{}').nota_do_dia !== false;
+            } catch {}
+            doDia.visible = ligada;
+        });
         const todas = new PopupMenu.PopupMenuItem('Mostrar todas');
         todas.connect('activate', () => rodar([]));
         this.menu.addMenuItem(todas);
@@ -209,7 +220,7 @@ class Central extends PanelMenu.Button {
             sub.menu.removeAll();
             for (const n of lista) {
                 const item = new PopupMenu.PopupMenuItem(n.titulo);
-                item.connect('activate', () => rodar(['--reabrir', String(n.id)]));
+                item.connect('activate', () => rodar([estado === 'lixeira' ? '--restaurar' : '--reabrir', String(n.id)]));
                 sub.menu.addMenuItem(item);
             }
         }
@@ -221,7 +232,8 @@ class Central extends PanelMenu.Button {
             const item = new PopupMenu.PopupBaseMenuItem();
             item.add_child(new St.Widget({style_class: `recados-ponto recados-${n.cor}`, y_align: Clutter.ActorAlign.CENTER}));
             const textos = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-            textos.add_child(new St.Label({text: n.titulo}));
+            const marca = {lixeira: '🗑 Lixeira (clique restaura): ', concluida: '✓ ', cancelada: '✗ ', arquivada: '▣ '}[n.estado] ?? '';
+            textos.add_child(new St.Label({text: `${marca}${n.titulo}`}));
             if (n.trecho)
                 textos.add_child(new St.Label({text: n.trecho, style_class: 'recados-trecho'}));
             item.add_child(textos);
@@ -233,7 +245,8 @@ class Central extends PanelMenu.Button {
                     y_align: Clutter.ActorAlign.CENTER,
                 }));
             }
-            const args = n.estado === 'ativa' ? ['--abrir', String(n.id)] : ['--reabrir', String(n.id)];
+            const opcao = {ativa: '--abrir', lixeira: '--restaurar'}[n.estado] ?? '--reabrir';
+            const args = [opcao, String(n.id)];
             item.connect('activate', () => rodar(args));
             this._secao.addMenuItem(item);
         }
