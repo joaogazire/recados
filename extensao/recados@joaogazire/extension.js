@@ -1,3 +1,4 @@
+import Atk from 'gi://Atk';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
@@ -7,6 +8,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import {ensureActorVisibleInScrollView} from 'resource:///org/gnome/shell/misc/animationUtils.js';
 
 import {idDaJanela, lerPosicoes, gravarPosicao, lerFixadas} from './posicoes.js';
 import {lerResumo, folhas, habitual, registrarAmostra, buscar, separarPorEstado, agendaDaCentral, agruparPorProjeto} from './central.js';
@@ -73,6 +75,60 @@ function rodar(args) {
     }
 }
 
+const ABRIR_MS = 220;
+const FECHAR_MS = 170;
+
+// Cabeçalho de grupo (projeto ou estado): nome, selo com a contagem e seta que gira.
+// Clicar abre/fecha o grupo sem fechar o menu (como um submenu, mas sem a caixa destacada).
+const Cabecalho = GObject.registerClass({Signals: {'alternar': {}}},
+class Cabecalho extends PopupMenu.PopupBaseMenuItem {
+    _init(rotulo, contagem, destaque, estaAberto) {
+        super._init({style_class: 'recados-cabecalho'});
+        this._estaAberto = estaAberto;  // quem sabe o estado é a Central (um grupo aberto por vez)
+        this.label = new St.Label({text: rotulo, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this.add_child(this.label);
+        this.label_actor = this.label;
+        if (contagem > 0) {
+            this.add_child(new St.Label({
+                text: String(contagem), y_align: Clutter.ActorAlign.CENTER,
+                style_class: destaque ? 'recados-selo recados-selo-pendente' : 'recados-selo',
+            }));
+        }
+        this._seta = new St.Icon({icon_name: 'pan-end-symbolic', style_class: 'popup-menu-arrow recados-seta',
+            y_align: Clutter.ActorAlign.CENTER});
+        this._seta.set_pivot_point(0.5, 0.5);
+        this.add_child(this._seta);
+        this.add_accessible_state(Atk.StateType.EXPANDABLE);
+    }
+
+    activate(_event) {
+        this.emit('alternar');  // não fecha o menu
+    }
+
+    vfunc_key_press_event(event) {
+        const tecla = event.get_key_symbol();
+        const aberto = this._estaAberto();
+        if ((tecla === Clutter.KEY_Right && !aberto) || (tecla === Clutter.KEY_Left && aberto)) {
+            this.emit('alternar');
+            return Clutter.EVENT_STOP;
+        }
+        return super.vfunc_key_press_event(event);
+    }
+
+    girar(aberto, animar) {
+        if (aberto) {
+            this.add_style_pseudo_class('checked');
+            this.add_accessible_state(Atk.StateType.EXPANDED);
+        } else {
+            this.remove_style_pseudo_class('checked');
+            this.remove_accessible_state(Atk.StateType.EXPANDED);
+        }
+        this._seta.remove_all_transitions();
+        this._seta.ease({rotation_angle_z: aberto ? 90 : 0, duration: animar ? ABRIR_MS : 0,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    }
+});
+
 const Central = GObject.registerClass(
 class Central extends PanelMenu.Button {
     _init() {
@@ -97,6 +153,7 @@ class Central extends PanelMenu.Button {
         this._desenhar();
         this.menu.connect('open-state-changed', (_m, aberto) => {
             if (aberto) {
+                this._limitarAltura();
                 this.atualizar();
                 if (this._busca)
                     global.stage.set_key_focus(this._busca);
@@ -144,6 +201,7 @@ class Central extends PanelMenu.Button {
 
     // Monta o menu fixo uma vez; depois só a lista muda (não tira o foco da busca).
     _montarMenu() {
+        this.menu.box.add_style_class_name('recados-menu');  // largura fixa: abrir um grupo não alarga o menu
         this._busca = new St.Entry({hint_text: 'Buscar nas notas…', can_focus: true, x_expand: true,
             style_class: 'recados-busca', text: this._termo ?? ''});
         this._busca.clutter_text.connect('text-changed', () => {
@@ -155,14 +213,21 @@ class Central extends PanelMenu.Button {
         this.menu.addMenuItem(linhaBusca);
         this._agenda = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._agenda);
+        // projetos e estados rolam aqui dentro; "Nova nota" e companhia ficam sempre visíveis embaixo
+        this._lista = new PopupMenu.PopupMenuSection();
+        this._rolagem = new St.ScrollView({style_class: 'recados-rolagem vfade', overlay_scrollbars: true,
+            hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC,
+            child: this._lista.box});
+        this._lista.actor = this._rolagem;
+        this.menu.addMenuItem(this._lista);
         this._secao = new PopupMenu.PopupMenuSection();
-        this.menu.addMenuItem(this._secao);
-        this._outros = {};
-        for (const [estado, rotulo] of [['concluida', 'Concluídas'], ['cancelada', 'Canceladas'], ['arquivada', 'Arquivadas'], ['lixeira', 'Lixeira']]) {
-            const sub = new PopupMenu.PopupSubMenuMenuItem(rotulo);
-            this._outros[estado] = {sub, rotulo};
-            this.menu.addMenuItem(sub);
-        }
+        this._lista.addMenuItem(this._secao);
+        this._estados = new PopupMenu.PopupMenuSection();
+        this._lista.addMenuItem(this._estados);
+        this._focaveis = new Map();  // chave estável → ator, para devolver o foco depois de refazer a lista
+        this._assinatura = null;
+        this._grupos = new Map();
+        this._aberto = null;  // chave do grupo aberto; sobrevive às atualizações da lista
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         const nova = new PopupMenu.PopupMenuItem('Nova nota');
         nova.connect('activate', () => rodar(['--nova']));
@@ -206,47 +271,136 @@ class Central extends PanelMenu.Button {
             this._agenda.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
     }
 
-    _listar() {
-        this._listarAgenda();
-        this._secao.removeAll();
-        const grupos = separarPorEstado(this._notas);
-        const termo = this._termo ?? '';
-        // sem busca: só as ativas; com busca: procura em todas
-        const achadas = buscar(termo.trim() ? this._notas : grupos.ativa, termo);
-        for (const [estado, {sub, rotulo}] of Object.entries(this._outros)) {
-            const lista = grupos[estado];
-            sub.label.text = `${rotulo} (${lista.length})`;
-            sub.visible = lista.length > 0;
-            sub.menu.removeAll();
-            for (const n of lista) {
-                const item = new PopupMenu.PopupMenuItem(n.titulo);
-                item.connect('activate', () => rodar([estado === 'lixeira' ? '--restaurar' : '--reabrir', String(n.id)]));
-                sub.menu.addMenuItem(item);
-            }
-        }
-        if (!achadas.length) {
-            const vazio = this._notas.length ? 'Nada encontrado' : 'Nenhuma nota';
-            this._secao.addMenuItem(new PopupMenu.PopupMenuItem(vazio, {reactive: false}));
-        }
-        if (!termo.trim()) {  // sem busca: um toggle por projeto, com as notas dele embaixo
-            for (const g of agruparPorProjeto(achadas)) {
-                const sub = new PopupMenu.PopupSubMenuMenuItem(
-                    g.pendentes ? `${g.projeto}  ·  ${g.pendentes} a fazer` : g.projeto);
-                for (const n of g.notas)
-                    sub.menu.addMenuItem(this._itemNota(n));
-                this._secao.addMenuItem(sub);
-            }
-            return;
-        }
-        for (const n of achadas)
-            this._secao.addMenuItem(this._itemNota(n));
+    _limitarAltura() {
+        const area = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex);
+        const escala = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        this._rolagem.style = `max-height: ${Math.round(area.height * 0.6 / escala)}px;`;
     }
 
-    _itemNota(n) {
-        const item = new PopupMenu.PopupBaseMenuItem();
+    _listar() {
+        this._listarAgenda();
+        const termo = (this._termo ?? '').trim();
+        const assinatura = `${termo}\u0000${JSON.stringify(this._notas)}`;
+        if (assinatura === this._assinatura)
+            return;  // nada mudou: não refaz (mantém foco e animações)
+        this._assinatura = assinatura;
+        const foco = global.stage.get_key_focus();
+        const chaveFoco = [...this._focaveis].find(([, ator]) => ator === foco)?.[0];
+        this._secao.removeAll();
+        this._estados.removeAll();
+        this._grupos.clear();
+        this._focaveis.clear();
+        const grupos = separarPorEstado(this._notas);
+        if (termo) {  // com busca: lista plana, procura em todas (inclusive concluídas e lixeira)
+            const achadas = buscar(this._notas, termo);
+            if (!achadas.length)
+                this._secao.addMenuItem(new PopupMenu.PopupMenuItem('Nada encontrado', {reactive: false}));
+            for (const n of achadas)
+                this._secao.addMenuItem(this._itemNota(n, null));
+        } else {
+            if (!grupos.ativa.length)
+                this._secao.addMenuItem(new PopupMenu.PopupMenuItem('Nenhuma nota ativa', {reactive: false}));
+            for (const g of agruparPorProjeto(grupos.ativa))  // um grupo por projeto, com as notas dele embaixo
+                this._grupo(this._secao, `p:${g.projeto}`, g.projeto, g.pendentes, true, g.notas);
+            const outros = [['concluida', 'Concluídas'], ['cancelada', 'Canceladas'], ['arquivada', 'Arquivadas'], ['lixeira', 'Lixeira']]
+                .filter(([estado]) => grupos[estado].length);
+            if (outros.length)
+                this._estados.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            for (const [estado, rotulo] of outros)
+                this._grupo(this._estados, `e:${estado}`, rotulo, grupos[estado].length, false, grupos[estado]);
+            if (!this._grupos.has(this._aberto))
+                this._aberto = null;  // o grupo aberto sumiu (ex.: projeto esvaziou)
+            else
+                this._mostrar(this._grupos.get(this._aberto), true, false);
+        }
+        this._focaveis.get(chaveFoco)?.grab_key_focus();
+    }
+
+    _focavel(chave, ator) {
+        this._focaveis.set(chave, ator);
+        ator.connect('key-focus-in', () => ensureActorVisibleInScrollView(this._rolagem, ator));
+    }
+
+    // Cabeçalho + corpo. As notas do corpo só são montadas quando o grupo abre; um grupo aberto por vez.
+    _grupo(destino, chave, rotulo, contagem, destaque, notas) {
+        const cab = new Cabecalho(rotulo, contagem, destaque, () => this._aberto === chave);
+        cab.accessible_name = destaque ? `${rotulo}, ${contagem} a fazer` : `${rotulo}, ${contagem} notas`;
+        const corpo = new PopupMenu.PopupMenuSection();
+        corpo.actor.clip_to_allocation = true;
+        corpo.actor.visible = false;
+        destino.addMenuItem(cab);
+        destino.addMenuItem(corpo);
+        const g = {chave, cab, corpo, notas, montado: false};
+        cab.connect('alternar', () => this._alternar(g));
+        this._focavel(chave, cab);
+        this._grupos.set(chave, g);
+    }
+
+    _alternar(g) {
+        const atual = this._grupos.get(this._aberto);
+        if (atual && atual !== g)
+            this._mostrar(atual, false, true);
+        const abrir = this._aberto !== g.chave;
+        this._aberto = abrir ? g.chave : null;
+        this._mostrar(g, abrir, true);
+    }
+
+    _mostrar(g, abrir, animar) {
+        if (abrir && !g.montado) {
+            for (const n of g.notas)
+                g.corpo.addMenuItem(this._itemNota(n, g));
+            g.montado = true;
+        }
+        g.cab.girar(abrir, animar);
+        const a = g.corpo.actor;
+        if (!abrir) {  // o foco não pode ficar num item que vai sumir
+            const foco = global.stage.get_key_focus();
+            if (foco && a.contains(foco))
+                g.cab.grab_key_focus();
+        }
+        const altura = a.visible ? a.height : 0;  // continua de onde a animação anterior parou
+        const opacidade = a.visible ? a.opacity : 0;
+        a.remove_all_transitions();
+        if (!animar) {
+            a.visible = abrir;
+            a.set_height(-1);
+            a.opacity = 255;
+            return;
+        }
+        if (abrir) {
+            a.visible = true;
+            a.set_height(-1);
+            const [, alvo] = a.get_preferred_height(-1);
+            a.set_height(altura);
+            a.opacity = opacidade;
+            a.ease({height: alvo, opacity: 255, duration: ABRIR_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                onComplete: () => a.set_height(-1)});
+        } else {
+            a.ease({height: 0, opacity: 0, duration: FECHAR_MS, mode: Clutter.AnimationMode.EASE_IN_CUBIC,
+                onComplete: () => {
+                    a.visible = false;
+                    a.set_height(-1);
+                    a.opacity = 255;
+                }});
+        }
+    }
+
+    _itemNota(n, g) {
+        const dentro = g !== null;
+        const item = new PopupMenu.PopupBaseMenuItem({style_class: dentro ? 'recados-nota recados-interna' : 'recados-nota'});
+        this._focavel(`n:${n.id}`, item);
+        if (dentro) {  // ← dentro de um grupo fecha o grupo e volta para o cabeçalho
+            item.connect('key-press-event', (_a, ev) => {
+                if (ev.get_key_symbol() !== Clutter.KEY_Left)
+                    return Clutter.EVENT_PROPAGATE;
+                this._alternar(g);
+                return Clutter.EVENT_STOP;
+            });
+        }
         item.add_child(new St.Widget({style_class: `recados-ponto recados-${n.cor}`, y_align: Clutter.ActorAlign.CENTER}));
         const textos = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const marca = {lixeira: '🗑 Lixeira (clique restaura): ', concluida: '✓ ', cancelada: '✗ ', arquivada: '▣ '}[n.estado] ?? '';
+        // dentro do grupo o estado já está no cabeçalho; na busca plana, a marca diz de onde a nota vem
+        const marca = dentro ? '' : ({lixeira: '🗑 Lixeira (clique restaura): ', concluida: '✓ ', cancelada: '✗ ', arquivada: '▣ '}[n.estado] ?? '');
         textos.add_child(new St.Label({text: `${marca}${n.titulo}`}));
         if (n.trecho)
             textos.add_child(new St.Label({text: n.trecho, style_class: 'recados-trecho'}));

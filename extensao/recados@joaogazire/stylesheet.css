@@ -10,3 +10,16 @@
 .recados-busca { min-width: 260px; }
 .recados-trecho { font-size: 0.85em; color: #c0bfbc; }
 .recados-vencido { color: #ff7b63; font-weight: bold; }
+
+/* Acordeão da central: cabeçalho e notas com o mesmo fundo do menu (sem a caixa do submenu do GNOME). */
+.recados-cabecalho, .recados-nota { transition-duration: 150ms; }
+.recados-cabecalho:checked { background-color: transparent; font-weight: bold; }
+.recados-cabecalho:checked:hover, .recados-cabecalho:checked:focus { background-color: rgba(255,255,255,.08); }
+.recados-seta { icon-size: 14px; margin-left: 6px; color: #9a9996; }
+.recados-cabecalho:checked .recados-seta { color: #deddda; }
+.recados-selo { font-size: 0.82em; font-feature-settings: "tnum"; padding: 1px 8px; border-radius: 99px;
+    background-color: rgba(255,255,255,.08); color: #c0bfbc; margin-left: 8px; }
+.recados-selo-pendente { background-color: rgba(248,228,92,.14); color: #f8e45c; }
+.popup-menu-item.recados-interna { padding-left: 30px; }
+.recados-interna .recados-ponto { width: 8px; height: 8px; border-radius: 4px; }
+.recados-menu { min-width: 340px; max-width: 340px; }
