@@ -428,3 +428,36 @@ def test_estilo_do_popover_nao_herda_cor_escura_da_barra():
     from pathlib import Path
     css = (Path(__file__).parent.parent / "recados" / "estilo.css").read_text()
     assert ".barra popover" in css and "popover_fg_color" in css
+
+
+def test_nova_nota_usa_fonte_e_tamanho_das_preferencias(repo, tmp_path, monkeypatch):
+    from recados import app as modapp
+    from recados.janela import TAMANHOS
+    from recados.preferencias import PADRAO, salvar
+    pref = tmp_path / "p.json"
+    salvar(pref, {**PADRAO, "fonte": "serifa", "tamanho": "G"})
+    monkeypatch.setenv("RECADOS_PREFERENCIAS", str(pref))
+    a = modapp.App()
+    a.repo = repo
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {0: object()})
+    recebidas = []
+    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: (recebidas.append(nota), type("J", (), {
+        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())[1])
+    a.nova_nota()
+    n = recebidas[-1]
+    assert n.id is None and repo.listar() == []  # rascunho: só vai pro banco quando tiver texto
+    assert n.fonte == "serifa" and (n.largura, n.altura) == TAMANHOS["G"]
+
+
+def test_nova_nota_nao_abre_as_outras_notas(repo, monkeypatch):
+    from recados import app as modapp
+    repo.criar("antiga 1")
+    repo.criar("antiga 2")
+    a = modapp.App()
+    a.repo = repo
+    monkeypatch.setattr(a, "_notas_abertas", lambda: {})
+    recebidas = []
+    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: (recebidas.append(nota), type("J", (), {
+        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())[1])
+    a.nova_nota()
+    assert len(recebidas) == 1 and recebidas[0].id is None

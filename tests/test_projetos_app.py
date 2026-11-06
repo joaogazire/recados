@@ -48,37 +48,27 @@ def app(repo, monkeypatch, tmp_path):
     return a
 
 
-def test_nova_nota_abre_a_caixinha_com_os_projetos(app, repo):
-    repo.criar(STEAMLOG)
-    repo.criar("# Inbox\n- [ ] x")
-    app.nova_nota()
-    assert app.caixas[-1]["projetos"] == ["Steamlog"] and app.caixas[-1]["itens"] is None
-    assert repo.listar()[-1].texto.startswith("# Inbox")  # nada criado só por abrir
 
 
-def test_nova_nota_de_dentro_de_um_projeto_ja_vem_nele(app, repo, monkeypatch):
-    s = repo.criar(STEAMLOG)
-    j = JanelaNota(repo, s)
-    monkeypatch.setattr(app, "get_active_window", lambda: j)
-    app.nova_nota()
-    assert app.caixas[-1]["projeto"] == "Steamlog"
 
 
 def test_captura_rapida_abre_a_mesma_caixinha(app, repo):
-    repo.criar(STEAMLOG)
+    repo.definir_projeto(repo.criar(STEAMLOG).id, "Steamlog")
     app.mostrar_captura()
     assert app.caixas[-1]["projetos"] == ["Steamlog"]
 
 
 def test_gravar_pela_caixinha_entra_no_fazer(app, repo):
     s = repo.criar(STEAMLOG)
-    app.nova_nota()
+    repo.definir_projeto(s.id, "Steamlog")
+    app.mostrar_captura()
     app.caixas[-1]["ao_gravar"]("Steamlog", False, ["guia"])
     assert "- [ ] a\n- [ ] guia\n\n## Feito" in repo.obter(s.id).texto
 
 
 def test_gravar_com_o_projeto_aberto_passa_pela_janela(app, repo, monkeypatch):
     s = repo.criar(STEAMLOG)
+    repo.definir_projeto(s.id, "Steamlog")
     j = JanelaNota(repo, s)
     monkeypatch.setattr(app, "_notas_abertas", lambda: {s.id: j})
     app.capturar("Steamlog", False, ["guia"])
@@ -96,14 +86,14 @@ def test_projeto_novo_abre_a_nota_dele(app, repo, monkeypatch):
 
 def test_palpite_da_caixinha_usa_os_projetos_do_banco(app, repo, monkeypatch):
     from recados import projetos
-    repo.criar(STEAMLOG)
-    monkeypatch.setattr(projetos, "pedir_deepseek", lambda t, n: "Inbox")
-    app.nova_nota()
+    repo.definir_projeto(repo.criar(STEAMLOG).id, "Steamlog")
+    monkeypatch.setattr(projetos, "pedir_deepseek", lambda t, n, d=None: "Inbox")
+    app.mostrar_captura()
     assert app.caixas[-1]["sugerir"]("teste no Steam Log") == "Steamlog"
 
 
 def test_voz_abre_a_caixinha_com_os_itens_e_a_fala(app, repo):
-    repo.criar(STEAMLOG)
+    repo.definir_projeto(repo.criar(STEAMLOG).id, "Steamlog")
     md = "# Teste no Steam Log\n- [ ] ver a categoria @amanhã 10h\n\n---\nTranscrição: teste no Steam Log"
     app._nota_de_voz(md)
     c = app.caixas[-1]
@@ -195,3 +185,49 @@ def test_marcar_no_editor_nao_joga_o_cursor_pro_fim(repo):
     off = len("# Steamlog\n\n## Fazer\n- [")
     j.clicar_offset(off)
     assert j.buffer.get_iter_at_mark(j.buffer.get_insert()).get_offset() == off
+
+
+def test_barra_da_nota_mostra_o_projeto(repo):
+    s = repo.criar(STEAMLOG)
+    repo.definir_projeto(s.id, "Steamlog")
+    j = JanelaNota(repo, repo.obter(s.id))
+    assert j.rotulo_projeto.get_visible() and j.rotulo_projeto.get_label() == "Steamlog"
+    sem = JanelaNota(repo, repo.criar("# x"))
+    assert not sem.rotulo_projeto.get_visible()
+
+
+def test_trocar_projeto_pela_nota_vira_manual(repo):
+    a = repo.criar(STEAMLOG)
+    repo.definir_projeto(a.id, "Steamlog")
+    n = repo.criar("# ideia")
+    j = JanelaNota(repo, n)
+    j.definir_projeto("Steamlog")
+    m = repo.obter(n.id)
+    assert m.projeto == "Steamlog" and m.projeto_manual is True
+    assert j.rotulo_projeto.get_label() == "Steamlog"
+    j.definir_projeto("  Novo Projeto ")
+    assert repo.obter(n.id).projeto == "Novo Projeto"
+
+
+def test_app_atualiza_o_rotulo_das_janelas_abertas_depois_de_classificar(app, repo, monkeypatch):
+    n = repo.criar("# guia")
+    j = JanelaNota(repo, n)
+    monkeypatch.setattr(app, "_notas_abertas", lambda: {n.id: j})
+    repo.definir_projeto(n.id, "Steamlog")  # o classificador gravou por outra conexão
+    app._atualizar_rotulos()
+    assert j.rotulo_projeto.get_label() == "Steamlog"
+
+
+def test_rascunho_vazio_nao_deixa_escolher_projeto(repo):
+    from recados.notas import rascunho
+    j = JanelaNota(repo, rascunho())
+    j.definir_projeto("Steamlog")
+    assert repo.listar() == []
+
+
+def test_nome_digitado_no_menu_junta_com_o_projeto_existente(repo):
+    a = repo.criar(STEAMLOG)
+    repo.definir_projeto(a.id, "Steamlog")
+    j = JanelaNota(repo, repo.criar("# x"))
+    j.definir_projeto("steamlog")
+    assert repo.obter(j.nota.id).projeto == "Steamlog"

@@ -2,8 +2,8 @@
 import pytest
 
 from recados.notas import Repositorio
-from recados.projetos import (INBOX, achar_nota, inserir_itens, itens_da_voz, mover_concluido, nomes,
-                              novo_projeto, projetos, sugerir_projeto)
+from recados.projetos import (INBOX, achar_nota, inserir_itens, itens_da_voz, mover_concluido,
+                              novo_projeto, sugerir_projeto)
 
 STEAMLOG = """# Steamlog
 PC: https://steamlog.local
@@ -40,21 +40,11 @@ def repo(tmp_path):
     r.fechar()
 
 
-# --- quem é projeto ---
-def test_projeto_e_nota_ativa_com_secao_fazer(repo):
-    s = repo.criar(STEAMLOG)
-    repo.criar(POSTIT)
-    repo.criar("# Inbox\n- [ ] solto")
-    repo.criar("# 05/11/2026 (qui)\n- [ ] pão")
-    repo.criar("# Teste por voz\n- [ ] algo")
-    arquivada = repo.criar("# Velho\n\n## Fazer\n- [ ] x")
-    repo.mudar_estado(arquivada.id, "arquivada")
-    assert nomes(repo) == ["Steamlog", "Post-it"]
-    assert [n.id for n in projetos(repo)][0] == s.id
 
 
 def test_achar_nota_por_nome_e_inbox(repo):
     s = repo.criar(STEAMLOG)
+    repo.definir_projeto(s.id, "Steamlog")
     assert achar_nota(repo, "steamlog").id == s.id
     assert achar_nota(repo, INBOX) is None
     i = repo.criar("# Inbox\n- [ ] a")
@@ -171,6 +161,7 @@ def test_nota_sem_fazer_nao_mexe():
 def test_gravar_no_projeto_existente(repo):
     from recados.projetos import gravar_itens
     s = repo.criar(STEAMLOG)
+    repo.definir_projeto(s.id, "Steamlog")
     n = gravar_itens(repo, "steamlog", False, ["guia"])
     assert n.id == s.id and "- [ ] Segredos criptografados\n- [ ] guia\n\n## Depois" in repo.obter(s.id).texto
 
