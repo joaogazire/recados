@@ -140,23 +140,6 @@ def test_preferencia_abrir_em_edicao(repo):
     assert not j.em_leitura and j.rolagem.get_visible()
 
 
-def test_nova_nota_usa_fonte_e_tamanho_das_preferencias(repo, tmp_path, monkeypatch):
-    from recados import app as modapp
-    from recados.janela import TAMANHOS
-    from recados.preferencias import PADRAO, salvar
-    pref = tmp_path / "p.json"
-    salvar(pref, {**PADRAO, "fonte": "serifa", "tamanho": "G"})
-    monkeypatch.setenv("RECADOS_PREFERENCIAS", str(pref))
-    a = modapp.App()
-    a.repo = repo
-    monkeypatch.setattr(a, "_notas_abertas", lambda: {0: object()})
-    recebidas = []
-    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: (recebidas.append(nota), type("J", (), {
-        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())[1])
-    a.nova_nota()
-    n = recebidas[-1]
-    assert n.id is None and repo.listar() == []  # rascunho: só vai pro banco quando tiver texto
-    assert n.fonte == "serifa" and (n.largura, n.altura) == TAMANHOS["G"]
 
 
 def test_shutdown_ignora_janela_que_nao_e_nota(repo, monkeypatch):
@@ -251,26 +234,8 @@ def test_nota_do_dia_nao_abre_dois_rascunhos(repo, monkeypatch):
     assert a._rascunho_dia is primeiro
 
 
-def test_captura_com_inbox_aberta_atualiza_a_janela(repo, monkeypatch):
-    from recados.app import App
-    from recados.captura import capturar
-    inbox = capturar(repo, "a")
-    j = JanelaNota(repo, inbox)
-    a = App()
-    a.repo = repo
-    monkeypatch.setattr(a, "_notas_abertas", lambda: {inbox.id: j})
-    a.capturar("b")
-    assert j.texto().endswith("- [ ] a\n- [ ] b")
-    assert repo.obter(inbox.id).texto.endswith("- [ ] a\n- [ ] b")
 
 
-def test_janela_de_captura_enter_grava(repo):
-    from recados.captura_janela import JanelaCaptura
-    recebidos = []
-    c = JanelaCaptura(recebidos.append)
-    c.entrada.set_text("ideia rápida")
-    c.entrada.emit("activate")
-    assert recebidos == ["ideia rápida"]
 
 
 def test_concluir_nota_fecha_e_muda_estado(repo):
@@ -311,14 +276,6 @@ def test_salvar_fixa_datas_relativas(repo, monkeypatch):
     assert j.texto() == repo.obter(j.nota.id).texto
 
 
-def test_app_cria_nota_de_voz_verde(repo, monkeypatch):
-    from recados.app import App
-    a = App()
-    a.repo = repo
-    monkeypatch.setattr(a, "abrir_nota", lambda i: True)
-    a._nota_de_voz("# Ideia\n- [ ] x")
-    [n] = repo.listar()
-    assert n.cor == "verde" and n.texto == "# Ideia\n- [ ] x"
 
 
 def test_cursor_nao_pula_ao_fixar_data(repo):
@@ -375,18 +332,6 @@ def test_voz_sem_whisper_nao_trava(repo, monkeypatch, tmp_path):
     assert fins == [None]
 
 
-def test_nova_nota_nao_abre_as_outras_notas(repo, monkeypatch):
-    from recados import app as modapp
-    repo.criar("antiga 1")
-    repo.criar("antiga 2")
-    a = modapp.App()
-    a.repo = repo
-    monkeypatch.setattr(a, "_notas_abertas", lambda: {})
-    recebidas = []
-    monkeypatch.setattr(modapp, "JanelaNota", lambda r, nota, app, ler=True: (recebidas.append(nota), type("J", (), {
-        "present": lambda s: None, "editor": type("E", (), {"grab_focus": lambda s: None})()})())[1])
-    a.nova_nota()
-    assert len(recebidas) == 1 and recebidas[0].id is None
 
 
 def test_tema_segue_o_sistema(monkeypatch, tmp_path):

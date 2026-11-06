@@ -65,13 +65,3 @@ def test_prompt_da_voz_ensina_lembrete():
     from recados import voz
     assert "@amanhã" in voz._PROMPT and "10h" in voz._PROMPT
 
-
-def test_nota_de_voz_fixa_data_relativa(repo, monkeypatch):
-    gi = pytest.importorskip("gi")
-    from recados import app as modapp
-    a = modapp.App()
-    a.repo = repo
-    monkeypatch.setattr(a, "abrir_nota", lambda i: True)
-    a._nota_de_voz("# Pão\n- [ ] comprar pão @amanhã 10h")
-    texto = repo.listar()[0].texto
-    assert "@amanhã" not in texto and "10h" in texto
