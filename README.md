@@ -64,7 +64,7 @@ gnome-extensions info recados@joaogazire   # deve mostrar "Estado: ACTIVE"
 
 | Ação | Como |
 |---|---|
-| Nova nota | **Ctrl+N** numa nota, ou "Nova nota" no painel |
+| Item novo num projeto | **Ctrl+N** numa nota, ou "Nova nota" no painel |
 | Mostrar todas | `recados`, ou "Mostrar todas" no painel |
 | Ler ↔ editar o Markdown | **Ctrl+E**, ou o ícone de olho |
 | Recolher só para a barra | Duplo clique na barra de cima |
@@ -87,18 +87,22 @@ A nota com texto abre no **modo leitura**: Markdown formatado e caixinhas que vo
 **negrito**  *itálico*  `código`  [link](https://...)
 ```
 
-### Captura rápida: **Super+Alt+N**
+### Projetos: Ctrl+N e Super+Alt+N
 
-Abre uma caixinha de uma linha. Escreva e aperte **Enter**: o texto vira `- [ ] ...` no fim da nota **Inbox**, que é criada na primeira vez. **Esc** cancela.
+Cada projeto é uma nota `# Nome` com `## Fazer` e `## Feito`. Os dois atalhos abrem a mesma caixinha:
+
+1. Escreva o que fazer. Para mais de um item, separe com `;`.
+2. **Enter**: com "Projeto automático", o Post-it escolhe o projeto. Se o nome dele aparece no texto (sem ligar para maiúsculas, acentos ou espaços: "Steam Log" = Steamlog), usa esse; senão pergunta ao DeepSeek, que só pode responder um projeto da lista. O que não tem relação com nenhum projeto vai para a **Inbox**.
+3. **Enter** de novo grava no fim de `## Fazer` do projeto. Dá para trocar o projeto na lista antes, inclusive para "+ Novo projeto…".
+
+Ctrl+N de dentro de um projeto já vem com esse projeto escolhido. Marcar um item `[x]` desce ele (com os subitens) para o topo de `## Feito`; desmarcar devolve para o fim de `## Fazer`. **Esc** cancela.
 
 ### Ideia por voz: **Super+Alt+V**
 
 1. Aperte **Super+Alt+V**. Abre uma nota verde com **● Gravando 0:00**, e o ícone do painel fica vermelho.
 2. Fale. O texto vai aparecendo na nota a cada 2 ou 3 s, transcrito pelo Whisper no seu PC, sem internet.
 3. Para terminar, aperte **Super+Alt+V** de novo ou clique em **Parar**. Depois de 5 minutos a gravação para sozinha.
-4. A nota mostra "Resumindo a ideia…". Em seguida vira uma nota verde com:
-   - um título e tópicos ou tarefas `- [ ]`, resumidos pelo DeepSeek;
-   - a transcrição original no fim.
+4. A nota mostra "Resumindo a ideia…". O DeepSeek resume a fala em tarefas, e abre a caixinha de projetos já com elas e com o palpite do projeto. **Enter** grava no `## Fazer` do projeto.
 
 O áudio é apagado depois de processado.
 

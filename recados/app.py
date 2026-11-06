@@ -17,7 +17,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 from recados.janela import JanelaNota  # noqa: E402
 from recados.notas import FONTES, TAMANHOS, Repositorio, rascunho  # noqa: E402
 from recados import fixadas, preferencias  # noqa: E402
-from recados.captura import achar_inbox, acrescentar_item, capturar  # noqa: E402
+from recados import projetos  # noqa: E402
 from recados.captura_janela import JanelaCaptura  # noqa: E402
 from recados.gravacao_janela import JanelaGravacao  # noqa: E402
 from recados.ao_vivo import ler_evento  # noqa: E402
@@ -49,7 +49,7 @@ class App(Adw.Application):
         self.add_main_option("nova", ord("n"), 0, 0, "Criar uma nota nova", None)
         self.add_main_option("abrir", ord("a"), 0, GLib.OptionArg.INT, "Abrir a nota pelo id", "ID")
         self.add_main_option("sessao", 0, 0, 0, "Início de sessão: abre as notas só se a preferência mandar", None)
-        self.add_main_option("capturar", ord("c"), 0, 0, "Captura rápida: uma linha para a Inbox", None)
+        self.add_main_option("capturar", ord("c"), 0, 0, "Captura rápida: um item num projeto (ou na Inbox)", None)
         self.add_main_option("restaurar", 0, 0, GLib.OptionArg.INT, "Tirar nota da lixeira", "ID")
         self.add_main_option("reabrir", 0, 0, GLib.OptionArg.INT, "Reabrir nota concluída/cancelada/arquivada", "ID")
         self.add_main_option("voz", ord("v"), 0, 0, "Gravar uma ideia falada (de novo para parar)", None)
@@ -273,24 +273,40 @@ class App(Adw.Application):
         return GLib.SOURCE_REMOVE
 
     def _nota_de_voz(self, texto: str):
-        nota = self.repo.criar(fixar_datas(texto, datetime.now()), "verde")
-        self.abrir_nota(nota.id)
+        """A ideia falada vira item(ns) de um projeto: abre a caixinha já com o palpite pedido."""
+        md = fixar_datas(texto, datetime.now())
+        itens = projetos.itens_da_voz(md)
+        # fechar a caixinha sem gravar não perde a ideia falada: vai para a Inbox
+        self.mostrar_captura(itens=itens, contexto=md,
+                             ao_cancelar=lambda: self.capturar(projetos.INBOX, False, itens))
 
-    def mostrar_captura(self):
-        JanelaCaptura(self.capturar, self).present()
+    def mostrar_captura(self, itens: list[str] | None = None, contexto: str = "", projeto: str | None = None,
+                        ao_cancelar=None):
+        nomes = projetos.nomes(self.repo)
+        JanelaCaptura(nomes, self.capturar, lambda t: projetos.sugerir_projeto(t, nomes), self,
+                      itens=itens, contexto=contexto, projeto=projeto, ao_cancelar=ao_cancelar).present()
 
-    def capturar(self, item: str):
-        """Acrescenta '- [ ] item' na Inbox; se a Inbox está aberta, passa pela janela para não perder edição."""
-        inbox = achar_inbox(self.repo)
-        j = self._notas_abertas().get(inbox.id) if inbox else None
-        if j is None:
-            capturar(self.repo, item)
-            return
-        j.salvar_agora()
-        j._trocar_texto(acrescentar_item(j.texto(), item))
-        j.salvar_agora()
-        if j.em_leitura:
-            j._montar_leitura()
+    def capturar(self, nome: str, novo: bool, itens: list[str]):
+        """Grava os itens no '## Fazer' do projeto; se a nota está aberta, passa pela janela (autosave)."""
+        alvo = projetos.achar_nota(self.repo, nome)
+        j = self._notas_abertas().get(alvo.id) if alvo else None
+        if j is not None:
+            j.salvar_agora()
+            j._trocar_texto(projetos.inserir_itens(j.texto(), itens))
+            j.salvar_agora()
+            if j.em_leitura:
+                j._montar_leitura()
+            nota = j.nota
+        else:
+            nota = projetos.gravar_itens(self.repo, nome, novo, itens)
+            if nota is None:
+                return
+            if alvo is None:  # projeto (ou Inbox) que acabou de nascer: mostra a nota
+                self.abrir_nota(nota.id)
+        aviso = Gio.Notification.new(f"✓ {projetos.titulo(nota.texto) or nome}")
+        aviso.set_body("\n".join(f"• {i}" for i in itens))
+        aviso.set_default_action_and_target("app.abrir", GLib.Variant.new_int32(nota.id))
+        self.send_notification("captura", aviso)
 
     def nota_do_dia(self):
         """Traz a nota de hoje; se não existe, abre um rascunho com o título da data."""
@@ -333,12 +349,12 @@ class App(Adw.Application):
             acao.set_enabled(ligada)
 
     def nova_nota(self):
-        p = preferencias.carregar()
-        largura, altura = TAMANHOS[p["tamanho"]]
-        nota = rascunho(fonte=p["fonte"], largura=largura, altura=altura)
-        j = self._janela(nota)
-        j.present()
-        j.editor.grab_focus()
+        """Ctrl+N: item novo num projeto. Aberta de dentro de um projeto, já vem nele."""
+        atual = self.get_active_window()
+        projeto = None
+        if isinstance(atual, JanelaNota) and atual.nota.id is not None:
+            projeto = projetos.titulo(atual.texto()) or None
+        self.mostrar_captura(projeto=projeto)
 
     def _avisar(self, nota, lembrete):
         n = Gio.Notification.new(f"⏰ {lembrete.titulo}")

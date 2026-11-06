@@ -16,6 +16,7 @@ from recados import fixadas  # noqa: E402
 from recados.datas import fixar_datas  # noqa: E402
 from recados.markdown import alternar_item, blocos, contar_tarefas, para_pango, realces  # noqa: E402
 from recados.notas import CORES, FONTES, TAMANHOS, Nota, Repositorio  # noqa: E402
+from recados.projetos import mover_concluido  # noqa: E402
 
 _CAIXAS = re.compile(r"^([ \t]*[-*+] )\[([ xX])\]", re.M)
 ATRASO_SALVAR_MS = 5000  # salva 5 s depois da última alteração (e sempre ao fechar)
@@ -346,7 +347,10 @@ class JanelaNota(Gtk.Window):
         it = self.buffer.get_iter_at_offset(offset)
         if not any(t.props.name in ("caixa", "caixa-marcada") for t in it.get_tags()):
             return False
-        self._trocar_texto(alternar_item(self.texto(), it.get_line()), offset)
+        linha = it.get_line()
+        alternado = alternar_item(self.texto(), linha)
+        movido = mover_concluido(alternado, linha)  # [x] desce para '## Feito' nas notas de projeto
+        self._trocar_texto(movido, min(offset, len(movido)))
         return True
 
     def apagar(self) -> None:
@@ -429,9 +433,18 @@ class JanelaNota(Gtk.Window):
             self._caixa_leitura.append(w)
 
     def _ao_marcar(self, botao, linha):
-        self._trocar_texto(alternar_item(self.texto(), linha))
+        alternado = alternar_item(self.texto(), linha)
+        movido = mover_concluido(alternado, linha)
+        self._trocar_texto(movido)
         self.salvar_agora()
         botao.get_child().set_css_classes(["feito"] if botao.get_active() else [])
+        if movido != alternado and self.em_leitura:  # as linhas mudaram de lugar: redesenha depois do sinal
+            GLib.idle_add(self._redesenhar_leitura)
+
+    def _redesenhar_leitura(self):
+        if self.em_leitura and self.get_realized() is not None and not self.apagando:
+            self._montar_leitura()
+        return GLib.SOURCE_REMOVE
 
     def _aplicar_cor(self, cor: str) -> None:
         for c in CORES:
