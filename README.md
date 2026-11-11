@@ -138,7 +138,7 @@ Ao clicar no ícone, o menu mostra:
 
 1. **Busca**: digite para procurar em todas as notas. Ignora acentos e maiúsculas e mostra o trecho onde a palavra aparece.
 2. **Lembretes**: os vencidos em vermelho e os dos próximos 7 dias.
-3. **Notas ativas**: um resumo de até 5 palavras e o progresso (`2/5`, `✓ 3`). Clicar traz a nota para a frente, mesmo que esteja fechada ou minimizada.
+3. **Notas ativas**: um resumo de até 3 palavras e o progresso (`2/5`, `✓ 3`). Clicar traz a nota para a frente, mesmo que esteja fechada ou minimizada.
 4. **Concluídas / Canceladas / Arquivadas**: clicar reabre a nota.
 5. **Nova nota · Nota do dia · Mostrar todas · Preferências**.
 
@@ -180,7 +180,7 @@ recados --listar        imprime as notas em JSON (usado pela extensão)
 
 Backup: copie `recados.db` com o app fechado, ou use `sqlite3 recados.db ".backup copia.db"`.
 
-**Privacidade:** o texto das notas (para os resumos de 5 palavras) e as transcrições da voz vão para o DeepSeek. O áudio nunca sai do PC.
+**Privacidade:** o texto das notas (para os resumos de 3 palavras) e as transcrições da voz vão para o DeepSeek. O áudio nunca sai do PC.
 
 ---
 

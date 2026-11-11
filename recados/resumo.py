@@ -10,7 +10,7 @@ from recados.datas import extrair
 from recados.notas import Repositorio
 
 MAX_TITULO = 60
-MAX_PALAVRAS = 5
+MAX_PALAVRAS = 3
 _PREFIXO = re.compile(r"^\s*(?:#{1,6} |[-*+] (?:\[[ xX]\] ?)?|\d+\. )")
 _ENFEITE = re.compile(r"\*\*|__|`|(?<!\w)[*_]|[*_](?!\w)")
 _ITEM = re.compile(r"^[ \t]*[-*+] \[([ xX])\]", re.M)
@@ -29,7 +29,7 @@ def assinatura(texto: str) -> str:
 
 
 def resumo_local(texto: str) -> str:
-    return " ".join(titulo_da_nota(texto).split()[:MAX_PALAVRAS])
+    return " ".join(titulo_da_nota(texto).split()[:MAX_PALAVRAS]).rstrip(".!?;:,-–—")
 
 
 def resumo(repo: Repositorio) -> list[dict]:
@@ -38,7 +38,7 @@ def resumo(repo: Repositorio) -> list[dict]:
     for n, lixo in [(n, False) for n in repo.listar(estado=None)] + [(n, True) for n in repo.listar_apagadas()]:
         marcas = _ITEM.findall(n.texto)
         atual = n.resumo and n.resumo_de == assinatura(n.texto)  # resumo de um texto antigo não vale
-        titulo = n.resumo if atual else resumo_local(n.texto)
+        titulo = " ".join(n.resumo.split()[:MAX_PALAVRAS]) if atual else resumo_local(n.texto)
         saida.append({"id": n.id, "titulo": titulo, "cor": n.cor,
                       "pendentes": marcas.count(" "), "total": len(marcas), "texto": n.texto[:2000],
                       "estado": "lixeira" if lixo else n.estado,

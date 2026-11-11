@@ -13,13 +13,13 @@ def repo(tmp_path):
     r.fechar()
 
 
-def test_resumo_local_corta_em_5_palavras():
-    assert resumir.resumo_local("# Agente de viagens: criar conta no SerpApi") == "Agente de viagens: criar conta"
+def test_resumo_local_corta_em_3_palavras():
+    assert resumir.resumo_local("# Agente de viagens: criar conta no SerpApi") == "Agente de viagens"
     assert resumir.resumo_local("") == "(vazia)"
 
 
 def test_limpar_resposta_do_modelo():
-    assert resumir.limpar('"Comprar pão e leite amanhã cedo."\n') == "Comprar pão e leite amanhã"
+    assert resumir.limpar('"Comprar pão e leite amanhã cedo."\n') == "Comprar pão e"
     assert resumir.limpar("   ") is None
 
 
@@ -34,7 +34,7 @@ def test_atualizar_guarda_resumo_e_nao_repete_se_texto_igual(repo):
     resumir.atualizar(repo, pedir=falso)
     resumir.atualizar(repo, pedir=falso)
     assert len(chamadas) == 1
-    assert repo.obter(n.id).resumo == "Lista de compras do mercado"
+    assert repo.obter(n.id).resumo == "Lista de compras"
     repo.atualizar(n.id, texto="# Farmácia")
     resumir.atualizar(repo, pedir=falso)
     assert len(chamadas) == 2
@@ -53,7 +53,7 @@ def test_falha_do_modelo_nao_grava(repo):
 def test_listar_usa_resumo_e_manda_texto_para_busca(repo):
     from recados.resumo import resumo
     n = repo.criar("# Uma primeira linha bem comprida demais para a central\nlinha dois")
-    assert resumo(repo)[0]["titulo"] == "Uma primeira linha bem comprida"
+    assert resumo(repo)[0]["titulo"] == "Uma primeira linha"
     repo.definir_resumo(n.id, "Linha comprida", resumir.assinatura(n.texto))
     item = resumo(repo)[0]
     assert item["titulo"] == "Linha comprida" and "linha dois" in item["texto"]
@@ -80,3 +80,10 @@ def test_listar_traz_lembretes(repo):
     repo.criar("- [ ] dentista @06/11/2026 14h")
     [l] = resumo(repo)[0]["lembretes"]
     assert l == {"quando": "2026-11-06T14:00:00", "titulo": "dentista", "feito": False}
+
+
+def test_resumo_guardado_longo_e_cortado_na_leitura(repo):
+    from recados.resumo import resumo, MAX_PALAVRAS
+    n = repo.criar("# Qualquer coisa")
+    repo.definir_resumo(n.id, "um dois três quatro cinco", resumir.assinatura(n.texto))
+    assert len(resumo(repo)[0]["titulo"].split()) == MAX_PALAVRAS

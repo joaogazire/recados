@@ -1,4 +1,4 @@
-"""Resumo de até 5 palavras por nota, pelo DeepSeek via proxy local do AI Usage Monitor."""
+"""Resumo de 3 palavras por nota, pelo DeepSeek via proxy local do AI Usage Monitor."""
 from __future__ import annotations
 
 import json
@@ -12,7 +12,7 @@ from recados.resumo import MAX_PALAVRAS, assinatura, resumo_local  # noqa: F401 
 PROXY = "http://127.0.0.1:8787/v1/chat/completions"  # só local: a chave nunca sai daqui direto
 MODELO = "deepseek-chat"
 MAX_TEXTO = 2000
-_PROMPT = ("Resuma do que se trata esta nota em no máximo 5 palavras, em português, sem pontuação "
+_PROMPT = (f"Resuma do que se trata esta nota em no máximo {MAX_PALAVRAS} palavras, em português, sem pontuação "
            "final e sem aspas. Responda só com o resumo.")
 
 

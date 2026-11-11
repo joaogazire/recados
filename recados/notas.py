@@ -48,7 +48,7 @@ class Nota:
     criada: float
     editada: float
     fonte: str = "sans"
-    resumo: str | None = None  # até 5 palavras, gerado pelo DeepSeek
+    resumo: str | None = None  # até 3 palavras, gerado pelo DeepSeek
     resumo_de: str | None = None  # hash do texto que gerou o resumo
     estado: str = "ativa"
     estado_em: float | None = None

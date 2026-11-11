@@ -11,10 +11,10 @@ Em ordem de esforço, do menor para o maior. Os tempos são de relógio, com o S
 - Um campo de texto no topo do menu do ícone do painel. Você digita "pão" e a lista mostra só as notas que têm "pão" no texto. Cada resultado traz o trecho do texto. Clicar abre a nota.
 - Para isso, o `recados --listar` passa a mandar também um trecho do texto, e a busca acontece na própria extensão.
 
-## 2b. Resumo de até 5 palavras na central (pedido em 01/11, junto com o item 2)
-- A lista do painel mostra um resumo de no máximo 5 palavras por nota, em vez da primeira linha inteira.
+## 2b. Resumo de até 3 palavras na central (pedido em 01/11, junto com o item 2)
+- A lista do painel mostra um resumo de no máximo 3 palavras por nota, em vez da primeira linha inteira.
 - O resumo é gerado pelo DeepSeek, pelo proxy 127.0.0.1:8787 (chave lida de `~/.local/share/opencode/auth.json` e mandada só para o proxy local). Fica guardado no banco com o hash do texto e é refeito só quando o texto muda.
-- Roda em segundo plano depois de salvar a nota. Se o DeepSeek falhar, a lista usa as primeiras 5 palavras do título.
+- Roda em segundo plano depois de salvar a nota. Se o DeepSeek falhar, a lista usa as primeiras 3 palavras do título.
 
 ## 3. Captura rápida por texto (~35 min)
 - O Super+Alt+N abre uma caixinha de uma linha só. Você digita, aperta Enter e o texto vira um `- [ ] texto` no fim da nota "Inbox", que é criada se não existir. Esc cancela.
