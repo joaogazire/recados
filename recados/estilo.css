@@ -35,3 +35,14 @@ window.captura popover listview row:hover { background: alpha(@popover_fg_color,
 window.captura popover listview row:selected { background: alpha(@accent_bg_color, .35); }
 window.captura popover listview row:selected label { font-weight: bold; }
 window.captura dropdown > button { font-weight: bold; font-size: 11.5pt; color: #222; background: rgba(255,255,255,.55); }
+/* Captura: cartão arredondado, campo claro com foco suave, dica discreta */
+window.captura { border-radius: 14px; box-shadow: 0 10px 32px rgba(0,0,0,.35), 0 0 0 1px rgba(0,0,0,.08); }
+window.captura dropdown > button { border-radius: 10px; min-height: 34px; padding: 0 12px; box-shadow: none; transition: background 150ms ease; }
+window.captura dropdown > button:hover { background: rgba(255,255,255,.8); }
+window.captura .campo { border-radius: 10px; background: rgba(255,255,255,.7); border: 1px solid rgba(0,0,0,.08); transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease; }
+window.captura .campo:focus-within { background: rgba(255,255,255,.92); border-color: alpha(@accent_bg_color, .8); box-shadow: 0 0 0 3px alpha(@accent_bg_color, .25); }
+window.captura entry.campo { min-height: 34px; padding: 0 10px; color: #222; outline: none; }
+window.captura .campo-texto, window.captura .campo-texto text { background: transparent; color: #222; caret-color: #222; font-size: 11.5pt; }
+window.captura .placeholder { color: rgba(0,0,0,.4); font-size: 11.5pt; }
+window.captura .dica { font-size: 9pt; color: rgba(0,0,0,.55); }
+window.captura spinner { color: rgba(0,0,0,.6); }
